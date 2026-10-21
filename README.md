@@ -2,8 +2,10 @@
 
 A fast, self-contained point-of-sale and stock-control system for a motorbike spares business.
 Built with **Python + FastAPI** and server-rendered pages. It runs on SQLite out of the box (fast, no
-server to install) and switches to PostgreSQL automatically when `DATABASE_URL` is set, so the same code
-can run in the cloud when the shop PC is off.
+server to install) and switches to PostgreSQL automatically when `DATABASE_URL` is set — which is how it
+runs in the cloud, so the shop keeps working when the shop PC is off.
+
+**Live:** <https://www.teamriders.bid>
 
 Money is stored as integer cents, stock is tracked through an append-only ledger, and every discount,
 cash movement and month close is recorded permanently.
@@ -32,124 +34,113 @@ Requirements: Python 3.10+ (tested on 3.13). No Node.js, no cloud services, no e
 
 ---
 
-## 2. Publish it online from this PC (Cloudflare Tunnel)
+## 2. Where the shop runs
 
-The shop is published at **https://www.teamriders.bid** (also `https://shop.teamriders.bid`) through a
-named Cloudflare Tunnel. The domain is registered at Cloudflare; HTTPS certificates are managed for you
-and no ports are opened on the router.
+**Live now:** <https://www.teamriders.bid> runs in the cloud on **Render** (Frankfurt, free plan) with the
+database on **Neon PostgreSQL**. Nothing on the shop PC needs to be switched on for the shop to work —
+you can sell from a phone, a laptop or a café.
 
-> **This PC must stay on.** For a version that keeps working when the PC is switched off, see
-> [section 2b](#2b-run-in-the-cloud-works-when-the-shop-pc-is-off) (free Render + Neon).
+| Piece | Where | Notes |
+|---|---|---|
+| App | Render `teamriders-pos` (free) | `https://teamriders-pos.onrender.com`, custom domains `www.`, `shop.` and the apex |
+| Database | Neon `neondb` (free, 0.5 GB) | Connection string lives only in Render's environment variables |
+| Code | GitHub `earnestchitsora92-dev/teamriders-pos` | Auto-deploys on every commit to `main` |
+| DNS | Cloudflare | `www`, `shop` and apex are CNAMEs to `teamriders-pos.onrender.com` (DNS only) |
 
-Start the app and the tunnel together:
+Render sleeps a free service after ~15 minutes without traffic (the first visit then takes ~30-60 s).
+The repository includes `.github/workflows/keepalive.yml`, which pings `/healthz` every 10 minutes to
+prevent that. Any uptime pinger aimed at `https://www.teamriders.bid/healthz` works as well.
+
+### Offline fallback on this PC (Cloudflare Tunnel)
+
+The PC copy still runs on SQLite and can be published through the named Cloudflare tunnel
+`teamriders` — useful if the internet at the shop dies, or as a spare till:
 
 ```powershell
 .\start-online.bat
 ```
 
-**Auto-start:** a shortcut named *Team Riders POS* is installed in the Windows Startup folder, so the shop
-comes online automatically when this PC signs in (the window is hidden; logs go to `logs\`). A second
-shortcut on the Desktop starts it manually with a visible window.
+A shortcut named *Team Riders POS* in the Windows Startup folder does this automatically at sign-in
+(hidden windows; logs in `logs\`). While DNS points at Render this tunnel is idle; to use it again,
+point the Cloudflare CNAMEs back at `5bfc9160-5e58-4aa8-ae7a-4d19316b78a1.cfargotunnel.com` (proxied).
 
-* Keep the PC switched on and connected — the site is served from this machine.
-* Data stays in `data/mxspares.db`; back that folder up regularly.
-* The launcher retries the tunnel every 30 seconds if the connection drops.
-* Tunnel settings: `%USERPROFILE%\.cloudflared\config.yml` (tunnel name `teamriders`, hostnames, local port).
-* The apex `teamriders.bid` can take a while to resolve everywhere after a new registration — use `www`.
-* The address is public, but every page requires a username and password.
+* Data in the fallback lives in `data/mxspares.db` and is **separate** from the cloud database —
+  use one or the other for real sales, not both.
+* `start.bat` runs it locally only; other devices on the same Wi-Fi can use `http://<this-pc-ip>:8077`.
 
-For access without internet exposure, `start.bat` runs it locally and other devices on the same
-Wi-Fi can use `http://<this-pc-ip>:8077`.
-
-### Azure App Service (if you get an account later)
-
-The repository is already prepared for Azure App Service (Linux, free F1):
+### Azure App Service (if you ever get an account)
 
 ```powershell
 az login
 .\deploy-azure.ps1
 ```
 
-`startup.sh` keeps the SQLite database on the persistent `/home/data` volume and switches it to
+`startup.sh` keeps a SQLite database on the persistent `/home/data` volume and switches it to
 rollback-journal mode, because WAL is unreliable on Azure's network file share.
 
 ---
 
-## 2b. Run in the cloud (works when the shop PC is off)
+## 2b. Rebuilding or moving the cloud deployment
 
-The tunnel above needs this PC switched on. To make the shop independent of the PC, the app runs on
-**Render** (free web hosting) with the database on **Neon** (free PostgreSQL). Both are free, need no
-card, and the app already supports PostgreSQL — `DATABASE_URL` switches the backend.
+Everything below is already done once; keep it for the day you change host, restore a backup or start over.
 
-| Piece | Service | Free tier |
-|---|---|---|
-| Web app | Render *Web Service* (Python) | 512 MB, sleeps after 15 min idle (kept awake by the GitHub Action) |
-| Database | Neon PostgreSQL | 0.5 GB, autosuspend |
-
-### Step 1 — Put the code in a GitHub repository
+### Step 1 — Push the code to GitHub
 
 ```powershell
-$env:GH_TOKEN = "ghp_..."   # GitHub → Settings → Developer settings → token with `repo` scope
+$env:GH_TOKEN = "ghp_..."   # token with `repo` (add `workflow` to publish .github/workflows)
 python scripts\push_to_github.py --repo teamriders-pos
 ```
 
-The script creates the repository (private by default) and uploads the source with no `git` install needed.
+No `git` install is needed: the script uploads the working tree through the GitHub API.
 
 ### Step 2 — Create the free PostgreSQL database (Neon)
 
-1. Sign up at <https://neon.tech> with GitHub or e-mail (no card).
-2. Create a project in the region closest to you (e.g. *AWS eu-central-1*).
-3. Copy the **connection string** — it looks like
-   `postgresql://user:password@ep-xxx.eu-central-1.aws.neon.tech/neondb?sslmode=require`.
+1. Sign up at <https://neon.tech> (no card).
+2. Create a project in the nearest region and copy the **connection string**
+   (`postgresql://…@ep-….neon.tech/neondb?sslmode=require`).
 
 ### Step 3 — Copy the shop data into Neon
 
-Run this once from this PC (it replaces whatever is in the empty Neon database):
-
 ```powershell
-$env:DATABASE_URL = "postgresql://...neon.tech/neondb?sslmode=require"
+$env:DATABASE_URL = "postgresql://…neon.tech/neondb?sslmode=require"
 python scripts\migrate_to_postgres.py
 ```
 
 Every table is copied with its original IDs and the ID sequences are reset, so the next receipt number
-continues where the shop left off. Sign-in sessions are not copied — everyone signs in again.
+continues where the shop left off. Sign-in sessions are not copied.
 
-### Step 4 — Deploy to Render
+### Step 4 — Create the Render service
 
-1. Sign up at <https://render.com> with GitHub (no card).
-2. Create an API key: *Account settings → API keys*.
-3. Run:
+Either use the dashboard (*New → Web Service → Public Git Repository*, Python 3, free plan, build
+`pip install -r requirements.txt`, start command below, env var `DATABASE_URL`, health check `/healthz`):
 
-```powershell
-$env:RENDER_API_KEY = "rnd_..."
-python scripts\deploy_render.py --repo-url https://github.com/<you>/teamriders-pos `
-    --database-url "postgresql://...neon.tech/neondb?sslmode=require" `
-    --domain www.teamriders.bid --wait
+```
+uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --forwarded-allow-ips '*'
 ```
 
-The script creates the free web service, sets the environment variables (`DATABASE_URL`, Python version),
-attaches the domain, and waits for the first deploy. You can also create the service by hand from
-`render.yaml` in the Render dashboard (*New → Blueprint*).
+…or with an API key (`RENDER_API_KEY`):
+
+```powershell
+python scripts\deploy_render.py --repo-url https://github.com/<you>/teamriders-pos `
+    --database-url "postgresql://…neon.tech/neondb?sslmode=require" --domain www.teamriders.bid --wait
+```
 
 ### Step 5 — Point the domain at Render
 
-In Cloudflare DNS, replace the tunnel CNAMEs for `www` and `shop` with the hostname Render shows for the
-service (e.g. `teamriders-pos.onrender.com`). Keep the Cloudflare proxy on *DNS only* until Render has
-issued its certificate, then switch it back to *Proxied* if you want Cloudflare caching.
+In Cloudflare DNS set these CNAMEs (Proxy status **DNS only** so Render can issue certificates):
 
-### Step 6 — Keep it awake
+| Name | Target |
+|---|---|
+| `www` | `teamriders-pos.onrender.com` |
+| `@` | `teamriders-pos.onrender.com` |
+| `shop` | `teamriders-pos.onrender.com` |
 
-Render's free tier sleeps after ~15 minutes idle. The repository ships
-`.github/workflows/keepalive.yml`, which pings `/healthz` every 10 minutes — enable Actions on the
-repository and the shop stays instantly available. (Any uptime pinger such as cron-job.org works too.)
+### Step 6 — Verify
 
-### Day-to-day with the cloud version
-
-* Everything (stock, sales, discounts, cash, closings, alerts) lives in Neon — nothing depends on this PC.
-* The PC copy keeps working offline on SQLite; both use exactly the same code and screens.
-* Test the database path any time with: `python scripts\pg_smoke_test.py` (35 checks over sales, stock,
-  discounts, quotations, cash, closings and reports).
-* Neon free databases pause when idle; the first query after a pause takes a second or two.
+```powershell
+python scripts\pg_smoke_test.py            # 35 checks against DATABASE_URL
+curl https://www.teamriders.bid/healthz    # {"status":"ok", ...}
+```
 
 ## 3. Roles
 
