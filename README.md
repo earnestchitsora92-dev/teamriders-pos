@@ -279,6 +279,7 @@ mx-spares/
 │  ├─ push_to_github.py       upload the source to GitHub (no git install needed)
 │  ├─ deploy_render.py        create/update the Render free web service
 │  └─ pg_smoke_test.py        35-check end-to-end test for either database backend
+│  └─ build_handbook.py      regenerates Team-Riders-Handbook.pdf from the source tree
 ├─ .github/workflows/keepalive.yml  pings the free Render app so it never sleeps
 ├─ render.yaml          Render blueprint (free plan, env vars, start command)
 ├─ run.py               launcher
