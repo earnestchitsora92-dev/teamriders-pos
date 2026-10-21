@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, Form, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -26,6 +27,7 @@ from app.routes_sales import router as sales_router
 db.init_db()
 
 app = FastAPI(title="Team Riders POS", docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(GZipMiddleware, minimum_size=800)
 app.mount("/static", StaticFiles(directory=str(db.APP_DIR / "static")), name="static")
 
 
@@ -110,7 +112,13 @@ def _cookie_secure(request: Request) -> bool:
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "time": db.now_str()}
+    # Touches the database on purpose: the keep-alive ping then keeps Neon's compute awake as well.
+    database = "ok"
+    try:
+        db.scalar("SELECT 1")
+    except Exception:
+        database = "unavailable"
+    return {"status": "ok", "database": database, "time": db.now_str()}
 
 
 @app.get("/login")

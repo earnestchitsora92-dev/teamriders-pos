@@ -64,9 +64,15 @@ def render(request: Request, name: str, status_code: int = 200, **ctx):
     nav_discounts = nav_alerts = nav_stock_requests = 0
     if user is not None and user["role"] == "admin":
         try:
-            nav_discounts = db.scalar("SELECT COUNT(*) FROM discounts WHERE status='pending'")
-            nav_alerts = db.scalar("SELECT COUNT(*) FROM stock_alerts WHERE status='waiting'")
-            nav_stock_requests = db.scalar("SELECT COUNT(*) FROM stock_requests WHERE status='pending'")
+            counts = db.fetch_one(
+                "SELECT (SELECT COUNT(*) FROM discounts WHERE status='pending') AS discounts, "
+                "(SELECT COUNT(*) FROM stock_alerts WHERE status='waiting') AS alerts, "
+                "(SELECT COUNT(*) FROM stock_requests WHERE status='pending') AS requests"
+            )
+            if counts:
+                nav_discounts = counts["discounts"]
+                nav_alerts = counts["alerts"]
+                nav_stock_requests = counts["requests"]
         except Exception:
             pass
     context = {

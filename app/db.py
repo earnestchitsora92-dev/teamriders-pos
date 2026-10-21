@@ -1,4 +1,4 @@
-"""SQLite storage layer: schema, connection helpers, seed data, settings."""
+﻿"""SQLite storage layer: schema, connection helpers, seed data, settings."""
 from __future__ import annotations
 import atexit
 import os
@@ -474,11 +474,17 @@ def _postgres_pool():
         if _pg_pool is None:
             from psycopg_pool import ConnectionPool
 
+            # Neon (and most poolers) close idle server-side connections, so every checkout is
+            # health-checked and connections are recycled well before they go stale.
             _pg_pool = ConnectionPool(
                 DATABASE_URL,
-                min_size=1,
+                min_size=2,
                 max_size=6,
                 timeout=15,
+                max_idle=180,
+                max_lifetime=900,
+                reconnect_timeout=120,
+                check=ConnectionPool.check_connection,
                 kwargs={"row_factory": _pg_row_factory},
                 open=True,
             )
@@ -529,20 +535,42 @@ def tx():
         conn.close()
 
 
-def fetch_all(sql: str, params: tuple | list = ()) -> list:
-    conn = connect()
+def _broken_connection(exc: BaseException) -> bool:
+    """True when the failure means the socket to the database died (not a SQL error)."""
     try:
-        return conn.execute(sql, params).fetchall()
-    finally:
-        conn.close()
+        import psycopg
+    except ImportError:  # pragma: no cover - SQLite only
+        return False
+    if not isinstance(exc, psycopg.OperationalError):
+        return False
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in ("closed", "ssl", "connection", "terminating", "server closed", "broken pipe", "reset")
+    )
+
+
+def _read(sql: str, params: tuple | list, first_only: bool):
+    """Run a read query, retrying once on a fresh connection if the pooled socket had gone stale."""
+    for attempt in (1, 2):
+        conn = connect()
+        try:
+            cursor = conn.execute(sql, params)
+            return cursor.fetchone() if first_only else cursor.fetchall()
+        except Exception as exc:
+            if attempt == 2 or not _broken_connection(exc):
+                raise
+        finally:
+            conn.close()
+    return None
+
+
+def fetch_all(sql: str, params: tuple | list = ()) -> list:
+    return _read(sql, params, first_only=False)
 
 
 def fetch_one(sql: str, params: tuple | list = ()):
-    conn = connect()
-    try:
-        return conn.execute(sql, params).fetchone()
-    finally:
-        conn.close()
+    return _read(sql, params, first_only=True)
 
 
 def scalar(sql: str, params: tuple | list = (), default=0):
@@ -565,7 +593,7 @@ _settings_loaded_at = 0.0
 def get_settings(force: bool = False) -> dict[str, str]:
     global _settings_loaded_at
     with _settings_lock:
-        fresh = _settings_cache and (time.time() - _settings_loaded_at) < 5
+        fresh = _settings_cache and (time.time() - _settings_loaded_at) < 30
         if fresh and not force:
             return dict(_settings_cache)
     data = dict(DEFAULT_SETTINGS)
