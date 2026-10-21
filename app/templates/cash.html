@@ -31,7 +31,7 @@
             <td>{{ c.user_name or 'system' }}</td>
             <td class="num {{ 'pos-num' if c.amount_cents > 0 else 'neg-num' }}">{{ c.amount_cents|money }}</td>
             <td class="right">
-              {% if c.kind not in ['sale_income', 'restock_payment', 'refund'] %}
+              {% if c.kind not in ['sale_income', 'restock_payment', 'refund', 'salary', 'customer_refund'] %}
               <form method="post" action="/cash/{{ c.id }}/delete" data-confirm="Remove this cash entry?">
                 <input type="hidden" name="csrf" value="{{ csrf }}">
                 <button class="btn btn-sm btn-danger">×</button>

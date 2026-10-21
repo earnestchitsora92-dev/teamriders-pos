@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
     role          TEXT NOT NULL CHECK (role IN ('admin', 'cashier')),
     password_hash TEXT NOT NULL,
     is_active     INTEGER NOT NULL DEFAULT 1,
+    is_deleted    INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL,
     last_login_at TEXT
 );
@@ -243,6 +244,39 @@ CREATE TABLE IF NOT EXISTS closings (
     snapshot                   TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS payroll (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    period       TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    method       TEXT NOT NULL DEFAULT 'cash',
+    reference    TEXT NOT NULL DEFAULT '',
+    note         TEXT NOT NULL DEFAULT '',
+    paid_by      INTEGER REFERENCES users(id),
+    created_at   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_payroll_created ON payroll(created_at);
+CREATE INDEX IF NOT EXISTS idx_payroll_user ON payroll(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS stock_requests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind            TEXT NOT NULL,
+    product_id      INTEGER NOT NULL REFERENCES products(id),
+    qty             INTEGER NOT NULL,
+    direction       INTEGER NOT NULL DEFAULT 1,
+    unit_cost_cents INTEGER NOT NULL DEFAULT 0,
+    refund_cents    INTEGER NOT NULL DEFAULT 0,
+    reason          TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending',
+    requested_by    INTEGER NOT NULL REFERENCES users(id),
+    decided_by      INTEGER REFERENCES users(id),
+    decided_at      TEXT,
+    admin_note      TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sreq_status ON stock_requests(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_sreq_product ON stock_requests(product_id);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER,
@@ -262,6 +296,7 @@ SCHEMA_PG = SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY 
 _ID_TABLES = {
     "users", "products", "stock_movements", "discounts", "sales", "sale_items", "quotations",
     "quotation_items", "stock_alerts", "cash_transactions", "closings", "audit_log",
+    "payroll", "stock_requests",
 }
 _INSERT_RE = re.compile(r"^\s*INSERT\s+INTO\s+([A-Za-z_]+)", re.IGNORECASE)
 
@@ -605,6 +640,9 @@ def init_db(seed: bool = True) -> None:
             # WAL is unsafe on network shares (e.g. Azure Files), hence the override.
             conn.execute("PRAGMA synchronous = NORMAL" if journal == "wal" else "PRAGMA synchronous = FULL")
             conn.executescript(SCHEMA)
+        _add_missing_columns(conn)
+        if IS_POSTGRES:
+            conn.commit()
     finally:
         conn.close()
     with tx() as c:
@@ -613,6 +651,26 @@ def init_db(seed: bool = True) -> None:
     if seed:
         seed_products()
     get_settings(force=True)
+
+
+# Columns added after the first release; existing databases are upgraded in place.
+_ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "users": [("is_deleted", "INTEGER NOT NULL DEFAULT 0")],
+}
+
+
+def _add_missing_columns(conn) -> None:
+    for table_name, columns in _ADDED_COLUMNS.items():
+        if IS_POSTGRES:
+            rows = conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ?", (table_name,)
+            ).fetchall()
+            existing = {row["column_name"] for row in rows}
+        else:
+            existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table_name})").fetchall()}
+        for column, ddl in columns:
+            if column not in existing:
+                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column} {ddl}")
 
 
 def seed_products() -> None:

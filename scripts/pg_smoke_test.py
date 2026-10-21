@@ -176,6 +176,77 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         check("void_sale", False, repr(exc))
 
+    # ---- stock requests (breakage / return) with admin approval
+    req = services.request_stock_change(
+        product_id=new_pid, kind="breakage", qty=2, reason="Dropped during fitting", user=cashier
+    )
+    check("stock request pending", req["id"] > 0 and req["step"] == -1, str(req["id"]))
+    pending_count = services.pending_stock_requests()
+    check("pending stock requests counted", pending_count >= 1, str(pending_count))
+    result = services.decide_stock_change(req["id"], admin, True, "Approved, write it off")
+    check("breakage applied", result["stock_qty"] == 7, str(result["stock_qty"]))
+    check("breakage ledger entry", db.scalar(
+        "SELECT COUNT(*) FROM stock_movements WHERE kind='breakage' AND product_id=?", (new_pid,)) == 1)
+
+    ret = services.request_stock_change(
+        product_id=new_pid, kind="return", qty=1, reason="Customer returned wrong size", user=cashier,
+        refund_cents=46000,
+    )
+    services.decide_stock_change(ret["id"], admin, True, "Refunded at the counter")
+    check("return restocked", services.product(new_pid)["stock_qty"] == 8, str(services.product(new_pid)["stock_qty"]))
+    check("return refund left the cash", db.scalar(
+        "SELECT COUNT(*) FROM cash_transactions WHERE kind='customer_refund' AND amount_cents < 0") == 1)
+
+    refused = services.request_stock_change(
+        product_id=new_pid, kind="correction", qty=1, reason="count check", user=cashier, direction=-1
+    )
+    services.decide_stock_change(refused["id"], admin, False, "count was right")
+    check("denied request leaves stock", services.product(new_pid)["stock_qty"] == 8)
+
+    # ---- salaries
+    sal = services.pay_salary(
+        user_id=cashier["id"], amount_cents=250000, period=db.current_period(), method="cash",
+        note="smoke salary", admin_id=admin["id"],
+    )
+    check("salary paid", sal["amount_cents"] == 250000 and sal["reference"].startswith("SAL-"), sal["reference"])
+    check("salary hit the cash ledger", db.scalar(
+        "SELECT COUNT(*) FROM cash_transactions WHERE kind='salary' AND amount_cents = -250000") == 1)
+    summary = services.salary_summary(db.current_period())
+    check("salary summary", summary["total_cents"] >= 250000, str(summary["total_cents"]))
+    check("salary history for user", len(services.salary_history_for(cashier["id"])) >= 1)
+
+    # ---- cashier sees no business performance
+    cstats = services.cashier_stats(cashier["id"])
+    check(
+        "cashier stats carry no money figures",
+        not any(k in cstats for k in ("revenue", "profit", "cash", "stock_value", "today", "month")),
+        str(sorted(cstats.keys())),
+    )
+
+    # ---- product delete / archive
+    spare = services.save_product(
+        {
+            "sku": f"DEL-{suffix}", "name": f"Delete Me {suffix}", "category": "General", "bike_model": "",
+            "price_cents": 1000, "cost_cents": 500, "stock_qty": 0, "reorder_level": 1, "is_active": 1, "notes": "",
+        },
+        admin["id"],
+    )
+    check("product hard delete", services.delete_product(spare) == "deleted")
+    check("product gone", services.product(spare) is None)
+    check("product with history is archived", services.delete_product(new_pid) == "archived")
+
+    # ---- user delete
+    temp_user = make_user("temp" + suffix, "cashier")
+    check("unused user deleted", services.delete_user(temp_user["id"], admin) == "deleted")
+    check("user row gone", db.fetch_one("SELECT * FROM users WHERE id = ?", (temp_user["id"],)) is None)
+    used_user = make_user("used" + suffix, "cashier")
+    services.create_sale(used_user, [{"product_id": 22, "qty": 1}] if services.product(22) else [{"product_id": new_pid, "qty": 1}],
+                         payment_method="cash", tendered_cents=1000000)
+    check("user with history anonymised", services.delete_user(used_user["id"], admin) == "anonymised")
+    kept = db.fetch_one("SELECT * FROM users WHERE id = ?", (used_user["id"],))
+    check("anonymised user cannot sign in", kept is not None and kept["is_deleted"] == 1 and kept["is_active"] == 0)
+    check("anonymised user hidden from team", all(u["id"] != used_user["id"] for u in services.team_members()))
+
     closing = services.close_period(month, admin, "smoke closing")
     check("close_period", closing > 0, str(closing))
 

@@ -61,11 +61,12 @@ templates.env.globals["now"] = lambda: datetime.now()
 def render(request: Request, name: str, status_code: int = 200, **ctx):
     settings = db.get_settings()
     user = getattr(request.state, "user", None)
-    nav_discounts = nav_alerts = 0
+    nav_discounts = nav_alerts = nav_stock_requests = 0
     if user is not None and user["role"] == "admin":
         try:
             nav_discounts = db.scalar("SELECT COUNT(*) FROM discounts WHERE status='pending'")
             nav_alerts = db.scalar("SELECT COUNT(*) FROM stock_alerts WHERE status='waiting'")
+            nav_stock_requests = db.scalar("SELECT COUNT(*) FROM stock_requests WHERE status='pending'")
         except Exception:
             pass
     context = {
@@ -79,6 +80,7 @@ def render(request: Request, name: str, status_code: int = 200, **ctx):
         "msg_kind": request.query_params.get("kind", "ok"),
         "nav_discounts": nav_discounts,
         "nav_alerts": nav_alerts,
+        "nav_stock_requests": nav_stock_requests,
     }
     context.update(ctx)
     return templates.TemplateResponse(request=request, name=name, context=context, status_code=status_code)

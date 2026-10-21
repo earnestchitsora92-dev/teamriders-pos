@@ -133,7 +133,12 @@
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <button class="btn btn-sm {{ 'btn-danger' if product.is_active else 'btn-ghost' }}">{{ 'Archive' if product.is_active else 'Restore' }}</button>
           </form>
+          <form method="post" action="/products/{{ product.id }}/delete" data-confirm="Delete {{ product.name }} permanently? If it has sales history it is archived instead, so old receipts stay intact.">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="btn btn-sm btn-danger">Delete</button>
+          </form>
         </div>
+        <p class="hint" style="margin-top:10px">Archive hides a part from the till but keeps it in the books. Delete removes it completely — allowed only while it has no sales or quotes.</p>
       </div>
     </div>
     {% endif %}

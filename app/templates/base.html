@@ -24,8 +24,12 @@
       <a class="nav-item {% if path == '/dashboard' %}active{% endif %}" href="/dashboard"><span class="ico">▦</span> Dashboard</a>
       <a class="nav-item {% if path == '/pos' %}active{% endif %}" href="/pos"><span class="ico">🛒</span> Point of Sale</a>
       <a class="nav-item {% if path.startswith('/sales') %}active{% endif %}" href="/sales"><span class="ico">🧾</span> Sales</a>
+      <a class="nav-item {% if path.startswith('/stock/requests') %}active{% endif %}" href="/stock/requests"><span class="ico">↩</span> Stock requests
+        {% if nav_stock_requests %}<span class="nav-badge warn">{{ nav_stock_requests }}</span>{% endif %}</a>
       <a class="nav-item {% if path.startswith('/quotations') %}active{% endif %}" href="/quotations"><span class="ico">📄</span> Quotations</a>
+      {% if user.role == 'admin' %}
       <a class="nav-item {% if path.startswith('/products') %}active{% endif %}" href="/products"><span class="ico">📦</span> Products</a>
+      {% endif %}
 
       {% if user.role == 'admin' %}
       <div class="nav-label">Stock control</div>
@@ -38,6 +42,7 @@
       <a class="nav-item {% if path.startswith('/discounts') %}active{% endif %}" href="/discounts"><span class="ico">🏷️</span> Discounts
         {% if nav_discounts %}<span class="nav-badge warn">{{ nav_discounts }}</span>{% endif %}</a>
       <a class="nav-item {% if path.startswith('/cash') %}active{% endif %}" href="/cash"><span class="ico">💵</span> Business cash</a>
+      <a class="nav-item {% if path.startswith('/salaries') %}active{% endif %}" href="/salaries"><span class="ico">🧑‍🔧</span> Salaries</a>
       <a class="nav-item {% if path.startswith('/closings') %}active{% endif %}" href="/closings"><span class="ico">📅</span> Monthly close</a>
       <a class="nav-item {% if path.startswith('/reports') %}active{% endif %}" href="/reports"><span class="ico">📈</span> Reports</a>
 

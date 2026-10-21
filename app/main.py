@@ -214,7 +214,7 @@ def setup_submit(
 
 @app.get("/account")
 def account_page(request: Request, user=Depends(require_user)):
-    return render(request, "account.html")
+    return render(request, "account.html", salaries=services.salary_history_for(user["id"]))
 
 
 @app.post("/account/password")
@@ -249,8 +249,11 @@ def home(request: Request):
 
 @app.get("/dashboard")
 def dashboard(request: Request, user=Depends(require_user)):
-    stats = services.dashboard_stats()
-    return render(request, "dashboard.html", stats=stats)
+    if user["role"] == "admin":
+        stats = services.dashboard_stats()
+    else:
+        stats = services.cashier_stats(user["id"])
+    return render(request, "dashboard.html", stats=stats, is_admin=user["role"] == "admin")
 
 
 app.include_router(sales_router)

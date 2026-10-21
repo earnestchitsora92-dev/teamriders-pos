@@ -32,10 +32,16 @@
             </td>
             <td class="right">
               {% if u.id != user.id %}
-              <form method="post" action="/users/{{ u.id }}/toggle" data-confirm="{{ 'Disable this user?' if u.is_active else 'Enable this user?' }}">
-                <input type="hidden" name="csrf" value="{{ csrf }}">
-                <button class="btn btn-sm {{ 'btn-danger' if u.is_active else 'btn-ghost' }}">{{ 'Disable' if u.is_active else 'Enable' }}</button>
-              </form>
+              <div class="row" style="gap:6px;flex-wrap:nowrap;justify-content:flex-end">
+                <form method="post" action="/users/{{ u.id }}/toggle" data-confirm="{{ 'Disable this user?' if u.is_active else 'Enable this user?' }}">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <button class="btn btn-sm {{ 'btn-danger' if u.is_active else 'btn-ghost' }}">{{ 'Disable' if u.is_active else 'Enable' }}</button>
+                </form>
+                <form method="post" action="/users/{{ u.id }}/delete" data-confirm="Delete {{ u.full_name }} permanently? Their past sales and salary records are kept for the books.">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <button class="btn btn-sm btn-danger">Delete</button>
+                </form>
+              </div>
               {% else %}
               <span class="badge">you</span>
               {% endif %}

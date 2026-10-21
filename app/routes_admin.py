@@ -31,7 +31,7 @@ def _page(request: Request) -> int:
 
 # ----------------------------------------------------------------- products
 @router.get("/products")
-def products_page(request: Request, user=Depends(require_user)):
+def products_page(request: Request, user=Depends(require_admin)):
     q = (request.query_params.get("q") or "").strip()
     category = request.query_params.get("category") or ""
     stock_filter = request.query_params.get("stock") or ""
@@ -113,7 +113,7 @@ def product_create(
 
 
 @router.get("/products/{product_id}")
-def product_detail(request: Request, product_id: int, user=Depends(require_user)):
+def product_detail(request: Request, product_id: int, user=Depends(require_admin)):
     product = services.product(product_id)
     if not product:
         raise NotFoundError()
@@ -347,6 +347,101 @@ def adjust_submit(
     return redirect(f"/products/{product_id}", f"Stock adjusted — {new_qty} units on hand")
 
 
+@router.post("/products/{product_id}/delete")
+def product_delete(request: Request, product_id: int, csrf: str = Form(""), admin=Depends(require_admin)):
+    verify_csrf(request, csrf)
+    row = db.fetch_one("SELECT * FROM products WHERE id = ?", (product_id,))
+    if not row:
+        raise NotFoundError()
+    try:
+        outcome = services.delete_product(product_id)
+    except ValueError as exc:
+        return redirect(f"/products/{product_id}", str(exc), "err")
+    audit(request, "product_delete", "product", product_id, outcome)
+    if outcome == "deleted":
+        return redirect("/products", f"{row['name']} deleted permanently")
+    return redirect("/products", f"{row['name']} has sales history, so it was archived instead of deleted")
+
+
+# ------------------------------------------------------------- stock requests
+@router.get("/stock/requests")
+def stock_requests_page(request: Request, user=Depends(require_user)):
+    status = request.query_params.get("status") or ("pending" if user["role"] == "admin" else "all")
+    if status not in ("pending", "approved", "denied", "all"):
+        status = "all"
+    rows = services.stock_requests_listing(
+        status, None if user["role"] == "admin" else user["id"]
+    )
+    products = db.fetch_all(
+        "SELECT id, sku, name, stock_qty, reorder_level FROM products WHERE is_active = 1 ORDER BY name LIMIT 500"
+    )
+    return render(
+        request,
+        "stock_requests.html",
+        rows=rows,
+        status=status,
+        products=[dict(p) for p in products],
+        stats=services.stock_request_stats(),
+        labels=services.STOCK_REQUEST_LABELS,
+    )
+
+
+@router.post("/stock/requests")
+def stock_request_create(
+    request: Request,
+    product_id: int = Form(...),
+    kind: str = Form(...),
+    qty: int = Form(...),
+    direction: str = Form("increase"),
+    refund: str = Form("0"),
+    reason: str = Form(...),
+    csrf: str = Form(""),
+    user=Depends(require_user),
+):
+    verify_csrf(request, csrf)
+    try:
+        result = services.request_stock_change(
+            product_id=product_id,
+            kind=kind,
+            qty=qty,
+            reason=reason,
+            user=user,
+            refund_cents=db.to_cents(refund),
+            direction=-1 if direction == "decrease" else 1,
+        )
+    except ValueError as exc:
+        return redirect("/stock/requests", str(exc), "err")
+    audit(request, "stock_request", "stock_request", result["id"], f"{kind} {qty} product={product_id}")
+    return redirect("/stock/requests", "Request sent to the administrator for approval")
+
+
+@router.post("/stock/requests/{request_id}/decide")
+def stock_request_decide(
+    request: Request,
+    request_id: int,
+    decision: str = Form(...),
+    note: str = Form(""),
+    refund: str = Form(""),
+    csrf: str = Form(""),
+    admin=Depends(require_admin),
+):
+    verify_csrf(request, csrf)
+    refund_cents = db.to_cents(refund) if refund.strip() else None
+    try:
+        result = services.decide_stock_change(
+            request_id, admin, decision == "approve", note, refund_cents
+        )
+    except ValueError as exc:
+        return redirect("/stock/requests?status=pending", str(exc), "err")
+    audit(request, "stock_request_decision", "stock_request", request_id, decision)
+    if result["status"] == "denied":
+        return redirect("/stock/requests?status=pending", "Request refused")
+    message = f"Approved - stock is now {result['stock_qty']} unit(s)"
+    if result.get("refund_cents"):
+        message += f", {db.fmt(result['refund_cents'])} refunded from the business cash"
+    return redirect("/stock/requests?status=pending", message)
+
+
 # ----------------------------------------------------------------- alerts
 @router.get("/alerts")
 def alerts_page(request: Request, admin=Depends(require_admin)):
@@ -411,8 +506,11 @@ CASH_LABELS = {
     "expense": "Operating expense",
     "owner_withdrawal": "Owner withdrawal",
     "capital_injection": "Capital injection",
-    "refund": "Refund",
+    "refund": "Refund (voided sale)",
     "adjustment": "Adjustment",
+    "salary": "Salary paid",
+    "customer_refund": "Customer return refund",
+    "breakage": "Breakage write-off",
 }
 
 
@@ -750,7 +848,7 @@ def settings_test_email(request: Request, to: str = Form(...), csrf: str = Form(
 @router.get("/users")
 def users_page(request: Request, admin=Depends(require_admin)):
     rows = db.fetch_all(
-        "SELECT u.*, (SELECT COUNT(*) FROM sales s WHERE s.cashier_id = u.id) AS sales_count FROM users u ORDER BY u.role, u.username"
+        "SELECT u.*, (SELECT COUNT(*) FROM sales s WHERE s.cashier_id = u.id) AS sales_count FROM users u WHERE u.is_deleted = 0 ORDER BY u.role, u.username"
     )
     return render(request, "users.html", users=[dict(r) for r in rows])
 
@@ -822,6 +920,71 @@ def user_toggle(request: Request, user_id: int, csrf: str = Form(""), admin=Depe
             conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
     audit(request, "user_toggle", "user", user_id, "deactivated" if row["is_active"] else "activated")
     return redirect("/users", f"{row['username']} {'deactivated' if row['is_active'] else 'activated'}")
+
+
+@router.post("/users/{user_id}/delete")
+def user_delete(request: Request, user_id: int, csrf: str = Form(""), admin=Depends(require_admin)):
+    verify_csrf(request, csrf)
+    try:
+        outcome = services.delete_user(user_id, admin)
+    except ValueError as exc:
+        return redirect("/users", str(exc), "err")
+    audit(request, "user_delete", "user", user_id, outcome)
+    message = (
+        "User deleted"
+        if outcome == "deleted"
+        else "User removed from the team; their past sales and salary records are kept for the books"
+    )
+    return redirect("/users", message)
+
+
+# ----------------------------------------------------------------- salaries
+@router.get("/salaries")
+def salaries_page(request: Request, admin=Depends(require_admin)):
+    period = request.query_params.get("period") or db.current_period()
+    if not services.PERIOD_RE.match(period):
+        period = db.current_period()
+    team = services.team_members()
+    return render(
+        request,
+        "salaries.html",
+        period=period,
+        team=team,
+        payments=services.salary_payments(),
+        summary=services.salary_summary(period),
+        balance=services.cash_balance(),
+        methods=services.SALARY_METHODS,
+    )
+
+
+@router.post("/salaries/pay")
+def salary_pay(
+    request: Request,
+    user_id: int = Form(...),
+    amount: str = Form(...),
+    period: str = Form(...),
+    method: str = Form("cash"),
+    note: str = Form(""),
+    csrf: str = Form(""),
+    admin=Depends(require_admin),
+):
+    verify_csrf(request, csrf)
+    try:
+        result = services.pay_salary(
+            user_id=user_id,
+            amount_cents=db.to_cents(amount),
+            period=period,
+            method=method,
+            note=note,
+            admin_id=admin["id"],
+        )
+    except ValueError as exc:
+        return redirect(f"/salaries?period={period}", str(exc), "err")
+    audit(request, "salary_paid", "payroll", result["id"], f"{result['user']} {result['amount_cents']} {method}")
+    return redirect(
+        f"/salaries?period={period}",
+        f"Paid {db.fmt(result['amount_cents'])} to {result['user']} ({result['reference']}) - cash balance updated",
+    )
 
 
 # ----------------------------------------------------------------- audit

@@ -7,7 +7,7 @@
 <div class="page-head">
   <div>
     <h1>{{ greeting }}, {{ user.full_name.split(' ')[0] }}</h1>
-    <div class="sub">{{ now().strftime('%A, %d %B %Y') }} · {{ 'Owner' if user.role == 'admin' else 'Cashier' }} view</div>
+    <div class="sub">{{ now().strftime('%A, %d %B %Y') }} · {{ 'Owner' if is_admin else 'Cashier' }} view</div>
   </div>
   <div class="row">
     <a class="btn btn-ghost" href="/quotations">Quotations</a>
@@ -15,7 +15,8 @@
   </div>
 </div>
 
-{% if user.role == 'admin' %}
+{% if is_admin %}
+
 <div class="grid cols-4" style="margin-bottom:16px">
   <div class="kpi tone-brand">
     <div class="kpi-label">Today's sales</div>
@@ -38,83 +39,39 @@
     <div class="kpi-sub">Stock at cost: {{ stats.stock.cost_value_cents|money }}</div>
   </div>
 </div>
-{% else %}
-<div class="grid cols-4" style="margin-bottom:16px">
-  <div class="kpi tone-brand">
-    <div class="kpi-label">Today's sales</div>
-    <div class="kpi-value">{{ stats.today.revenue|money }}</div>
-    <div class="kpi-sub">{{ stats.today.count }} transaction(s)</div>
-  </div>
-  <div class="kpi tone-ok">
-    <div class="kpi-label">This month</div>
-    <div class="kpi-value">{{ stats.month.revenue|money }}</div>
-    <div class="kpi-sub">{{ stats.month.count }} sales recorded</div>
-  </div>
-  <div class="kpi tone-warn">
-    <div class="kpi-label">Low stock alerts</div>
-    <div class="kpi-value">{{ stats.stock.low_count }}</div>
-    <div class="kpi-sub">{{ stats.stock.out_count }} item(s) out of stock</div>
-  </div>
-  <div class="kpi">
-    <div class="kpi-label">Parts on hand</div>
-    <div class="kpi-value">{{ stats.stock.units|qty }}</div>
-    <div class="kpi-sub">Across {{ stats.stock.skus }} product(s)</div>
-  </div>
-</div>
-{% endif %}
 
 <div class="grid main-side" style="margin-bottom:16px">
   <div class="card">
     <div class="card-head">
-      <h2>{{ 'Top performing parts this month' if user.role == 'admin' else 'Recent sales' }}</h2>
-      {% if user.role == 'admin' %}<a class="mini-link" href="/reports">Full report</a>{% endif %}
+      <h2>Top performing parts this month</h2>
+      <a class="mini-link" href="/reports">Full report</a>
     </div>
-    {% if user.role == 'admin' %}
-      {% if stats.top_products %}
-      <div class="table-wrap">
-        <table class="data">
-          <thead><tr><th>Part</th><th class="num">Sold</th><th class="num">Revenue</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
-          <tbody>
-          {% for p in stats.top_products %}
-            <tr>
-              <td><div class="cell-title">{{ p.name }}</div><div class="cell-sub">{{ p.sku }}</div></td>
-              <td class="num">{{ p.qty }}</td>
-              <td class="num">{{ p.revenue_cents|money }}</td>
-              <td class="num pos-num">{{ p.profit_cents|money }}</td>
-              <td class="num">{{ p.margin_percent }}%</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty"><span class="big">📈</span>No sales recorded this month yet.</div>
-      {% endif %}
+    {% if stats.top_products %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Part</th><th class="num">Sold</th><th class="num">Revenue</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
+        <tbody>
+        {% for p in stats.top_products %}
+          <tr>
+            <td><div class="cell-title">{{ p.name }}</div><div class="cell-sub">{{ p.sku }}</div></td>
+            <td class="num">{{ p.qty }}</td>
+            <td class="num">{{ p.revenue_cents|money }}</td>
+            <td class="num pos-num">{{ p.profit_cents|money }}</td>
+            <td class="num">{{ p.margin_percent }}%</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
-      <div class="table-wrap">
-        <table class="data">
-          <thead><tr><th>Receipt</th><th>Cashier</th><th class="num">Total</th><th>When</th></tr></thead>
-          <tbody>
-          {% for s in stats.recent_sales %}
-            <tr>
-              <td><a href="/sales/{{ s.id }}">{{ s.receipt_no }}</a></td>
-              <td>{{ s.cashier_name }}</td>
-              <td class="num">{{ s.total_cents|money }}</td>
-              <td class="muted">{{ s.created_at|datefmt(true) }}</td>
-            </tr>
-          {% else %}
-            <tr><td colspan="4" class="empty">No sales yet today.</td></tr>
-          {% endfor %}
-          </tbody>
-        </table>
-      </div>
+    <div class="empty"><span class="big">📈</span>No sales recorded this month yet.</div>
     {% endif %}
   </div>
 
   <div class="card">
     <div class="card-head">
       <h3>Restock attention</h3>
-      {% if user.role == 'admin' %}<a class="mini-link" href="/stock?stock=low">Open stock</a>{% endif %}
+      <a class="mini-link" href="/stock?stock=low">Open stock</a>
     </div>
     <div class="card-body tight">
       <ul class="list-plain">
@@ -132,17 +89,14 @@
         {% endfor %}
       </ul>
     </div>
-    {% if user.role == 'admin' %}
     <div class="card-foot row">
       <span class="muted" style="font-size:12px">Stock value (cost): <strong>{{ stats.stock.cost_value_cents|money }}</strong></span>
       <div class="spacer"></div>
       <a class="btn btn-sm btn-ghost" href="/stock/restock">Restock</a>
     </div>
-    {% endif %}
   </div>
 </div>
 
-{% if user.role == 'admin' %}
 <div class="grid cols-2" style="margin-bottom:16px">
   <div class="card">
     <div class="card-head"><h3>Money in the business</h3><a class="mini-link" href="/cash">Cash ledger</a></div>
@@ -169,6 +123,10 @@
           <strong>{% if stats.pending_discounts %}<span class="badge warn">{{ stats.pending_discounts }}</span>{% else %}0{% endif %}</strong>
         </div>
         <div class="stat-row">
+          <span><a href="/stock/requests?status=pending">Stock changes to approve</a></span>
+          <strong>{% if nav_stock_requests %}<span class="badge warn">{{ nav_stock_requests }}</span>{% else %}0{% endif %}</strong>
+        </div>
+        <div class="stat-row">
           <span><a href="/alerts">Customers waiting for stock</a></span>
           <strong>{% if stats.waiting_alerts %}<span class="badge warn">{{ stats.waiting_alerts }}</span>{% else %}0{% endif %}</strong>
         </div>
@@ -184,7 +142,6 @@
     </div>
   </div>
 </div>
-{% endif %}
 
 <div class="card">
   <div class="card-head"><h3>Latest receipts</h3><a class="mini-link" href="/sales">All sales</a></div>
@@ -208,4 +165,95 @@
     </table>
   </div>
 </div>
+
+{% else %}
+
+<div class="grid cols-3" style="margin-bottom:16px">
+  <div class="kpi tone-brand">
+    <div class="kpi-label">Receipts you rang up today</div>
+    <div class="kpi-value">{{ stats.my_sales_today }}</div>
+    <div class="kpi-sub">Count only — the money side belongs to the owner</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Discount requests waiting</div>
+    <div class="kpi-value">{{ stats.my_discounts|selectattr('status', 'equalto', 'pending')|list|length }}</div>
+    <div class="kpi-sub">Awaiting approval</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Stock requests waiting</div>
+    <div class="kpi-value">{{ stats.my_stock_requests|selectattr('status', 'equalto', 'pending')|list|length }}</div>
+    <div class="kpi-sub">Breakages and returns awaiting approval</div>
+  </div>
+</div>
+
+<div class="grid cols-2" style="margin-bottom:16px">
+  <div class="card">
+    <div class="card-head"><h3>Your recent receipts</h3><a class="mini-link" href="/sales">All my sales</a></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Receipt</th><th>Customer</th><th>When</th></tr></thead>
+        <tbody>
+        {% for s in stats.recent_sales %}
+          <tr>
+            <td><a href="/sales/{{ s.id }}">{{ s.receipt_no }}</a></td>
+            <td>{{ s.customer_name or '—' }}</td>
+            <td class="muted">{{ s.created_at|datefmt(true) }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3" class="empty">Nothing yet today — <a href="/pos">open the till</a>.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-foot">
+      <span class="muted" style="font-size:12px">Open a receipt to view or reprint it.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Your discount requests</h3><a class="mini-link" href="/pos">New sale</a></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Code</th><th>Status</th><th>Expires</th></tr></thead>
+        <tbody>
+        {% for d in stats.my_discounts %}
+          <tr>
+            <td class="mono">{{ d.code }}</td>
+            <td>
+              <span class="badge {{ 'ok' if d.status == 'approved' else ('warn' if d.status == 'pending' else 'bad') }}">{{ d.status }}</span>
+            </td>
+            <td class="muted">{{ d.expires_at|datefmt(true) }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="3" class="empty">No discount requests raised.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head"><h3>Your breakage &amp; return requests</h3><a class="mini-link" href="/stock/requests">Open requests</a></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Part</th><th>Type</th><th class="num">Qty</th><th>Reason</th><th>Status</th><th>When</th></tr></thead>
+      <tbody>
+      {% for r in stats.my_stock_requests %}
+        <tr>
+          <td><div class="cell-title">{{ r.product_name }}</div><div class="cell-sub">{{ r.sku }}</div></td>
+          <td>{{ {'breakage': 'Breakage', 'return': 'Return', 'correction': 'Correction'}.get(r.kind, r.kind) }}</td>
+          <td class="num">{{ r.qty }}</td>
+          <td class="muted">{{ r.reason }}</td>
+          <td><span class="badge {{ 'ok' if r.status == 'approved' else ('warn' if r.status == 'pending' else 'bad') }}">{{ r.status }}</span></td>
+          <td class="muted">{{ r.created_at|datefmt(true) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">Nothing raised. Use <a href="/stock/requests">Stock requests</a> to report breakage or a customer return.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

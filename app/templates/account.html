@@ -37,4 +37,28 @@
     </div>
   </div>
 </div>
+
+{% if user.role != 'admin' %}
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>Your salary payments</h3></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Reference</th><th>Month</th><th>Method</th><th>Paid</th><th class="num">Amount</th></tr></thead>
+      <tbody>
+      {% for p in salaries %}
+        <tr>
+          <td class="mono">{{ p.reference }}</td>
+          <td>{{ p.period }}</td>
+          <td><span class="badge info">{{ p.method }}</span></td>
+          <td class="muted nowrap">{{ p.created_at|datefmt(true) }}</td>
+          <td class="num pos-num">{{ p.amount_cents|money }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="empty">No salary payments recorded yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

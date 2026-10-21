@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Salaries{% endblock %}
+{% block heading %}Salaries{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Salaries</h1>
+    <div class="sub">Pay the team straight out of the business cash. Every payment reduces the cash balance and is recorded against the person and the month.</div>
+  </div>
+  <form class="row" method="get" action="/salaries" style="align-items:flex-end;gap:8px">
+    <div class="field" style="margin:0">
+      <label for="period">Month</label>
+      <input id="period" type="month" name="period" value="{{ period }}">
+    </div>
+    <button class="btn btn-dark" type="submit">Show</button>
+  </form>
+</div>
+
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi tone-brand">
+    <div class="kpi-label">Paid in {{ summary.period }}</div>
+    <div class="kpi-value">{{ summary.total_cents|money }}</div>
+    <div class="kpi-sub">{{ summary.payments }} payment(s)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Business cash now</div>
+    <div class="kpi-value">{{ balance.balance_cents|money }}</div>
+    <div class="kpi-sub">All methods combined</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Money in</div>
+    <div class="kpi-value">{{ balance.inflow_cents|money }}</div>
+  </div>
+  <div class="kpi tone-bad">
+    <div class="kpi-label">Money out</div>
+    <div class="kpi-value">{{ balance.outflow_cents|money }}</div>
+  </div>
+</div>
+
+<div class="grid main-side">
+  <div class="card">
+    <div class="card-head"><h3>Payment history</h3></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Reference</th><th>Team member</th><th>Month</th><th>Method</th><th>Paid by</th><th>When</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+        {% for p in payments %}
+          <tr>
+            <td class="mono">{{ p.reference }}</td>
+            <td><div class="cell-title">{{ p.user_name }}</div><div class="cell-sub">@{{ p.username }} · {{ p.role }}</div></td>
+            <td>{{ p.period }}</td>
+            <td><span class="badge info">{{ p.method }}</span></td>
+            <td class="muted">{{ p.paid_by_name or '—' }}</td>
+            <td class="muted nowrap">{{ p.created_at|datefmt(true) }}</td>
+            <td class="num neg-num">{{ p.amount_cents|money }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="empty">No salaries paid yet. Use the form to pay the first one.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if summary.by_person %}
+    <div class="card-foot row" style="flex-wrap:wrap;gap:8px">
+      {% for person in summary.by_person %}
+      <span class="badge">{{ person.user_name }}: {{ person.total_cents|money }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Pay a salary</h3></div>
+    <div class="card-body">
+      <form method="post" action="/salaries/pay">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="user_id">Team member</label>
+          <select id="user_id" name="user_id" required>
+            {% for u in team %}
+            <option value="{{ u.id }}">{{ u.full_name }} — {{ u.role }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="amount">Amount</label>
+          <input id="amount" name="amount" type="text" inputmode="decimal" placeholder="0.00" required>
+        </div>
+        <div class="field">
+          <label for="pay_period">For the month</label>
+          <input id="pay_period" name="period" type="month" value="{{ period }}" required>
+        </div>
+        <div class="field">
+          <label for="method">Paid by</label>
+          <select id="method" name="method">
+            {% for m in methods %}
+            <option value="{{ m }}">{{ m|capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="note">Note (optional)</label>
+          <input id="note" name="note" type="text" placeholder="e.g. August salary + overtime">
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Pay from business cash</button>
+      </form>
+      <p class="hint" style="margin-top:12px">
+        The payment is written to the cash ledger as <strong>Salary paid</strong> and counts as an operating expense in
+        the monthly close, so net profit and the cash balance both stay correct.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

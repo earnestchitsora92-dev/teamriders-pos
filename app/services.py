@@ -7,10 +7,11 @@ import secrets
 import sqlite3
 from datetime import date, datetime, timedelta
 
-from app import db
+from app import db, security
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 LOW_STOCK_SQL = "stock_qty <= reorder_level"
+PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 # --------------------------------------------------------------- catalogue
@@ -101,6 +102,27 @@ def save_product(data: dict, user_id: int, product_id: int | None = None) -> int
 def set_product_active(product_id: int, active: bool) -> None:
     with db.tx() as conn:
         conn.execute("UPDATE products SET is_active = ?, updated_at = ? WHERE id = ?", (1 if active else 0, db.now_str(), product_id))
+
+
+def delete_product(product_id: int) -> str:
+    """Delete a part outright when it has no history; otherwise archive it so receipts stay readable."""
+    row = product(product_id)
+    if not row:
+        raise ValueError("Product not found")
+    history = db.scalar(
+        "SELECT (SELECT COUNT(*) FROM sale_items WHERE product_id = ?) "
+        "+ (SELECT COUNT(*) FROM quotation_items WHERE product_id = ?) "
+        "+ (SELECT COUNT(*) FROM stock_alerts WHERE product_id = ?)",
+        (product_id, product_id, product_id),
+    )
+    if history:
+        set_product_active(product_id, False)
+        return "archived"
+    with db.tx() as conn:
+        conn.execute("DELETE FROM stock_movements WHERE product_id = ?", (product_id,))
+        conn.execute("DELETE FROM stock_requests WHERE product_id = ?", (product_id,))
+        conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+    return "deleted"
 
 
 # --------------------------------------------------------------- stock
@@ -548,6 +570,8 @@ CASH_KINDS = {
     "capital_injection": 1,
     "adjustment": 1,
     "refund": -1,
+    "salary": -1,
+    "customer_refund": -1,
 }
 
 
@@ -599,8 +623,21 @@ def period_summary(period: str) -> dict:
         (start, end),
     )
     expenses = db.scalar(
-        "SELECT COALESCE(-SUM(amount_cents),0) FROM cash_transactions WHERE kind='expense' AND amount_cents < 0 "
-        "AND created_at >= ? AND created_at < ?",
+        "SELECT COALESCE(-SUM(amount_cents),0) FROM cash_transactions WHERE kind IN ('expense','salary') "
+        "AND amount_cents < 0 AND created_at >= ? AND created_at < ?",
+        (start, end),
+    )
+    salaries = db.scalar(
+        "SELECT COALESCE(SUM(amount_cents),0) FROM payroll WHERE created_at >= ? AND created_at < ?", (start, end)
+    )
+    breakage = db.fetch_one(
+        "SELECT COALESCE(SUM(-qty_delta),0) AS units, COALESCE(SUM(-qty_delta * unit_cost_cents),0) AS value "
+        "FROM stock_movements WHERE kind='breakage' AND created_at >= ? AND created_at < ?",
+        (start, end),
+    )
+    returns = db.fetch_one(
+        "SELECT COALESCE(SUM(qty_delta),0) AS units, COALESCE(SUM(qty_delta * unit_cost_cents),0) AS value "
+        "FROM stock_movements WHERE kind='return' AND created_at >= ? AND created_at < ?",
         (start, end),
     )
     cash = db.fetch_one(
@@ -636,7 +673,12 @@ def period_summary(period: str) -> dict:
         "cogs_cents": sales["cogs"],
         "gross_profit_cents": gross_profit,
         "expenses_cents": expenses,
+        "salaries_cents": salaries,
         "net_profit_cents": net_profit,
+        "breakage_units": breakage["units"],
+        "breakage_cents": breakage["value"],
+        "return_units": returns["units"],
+        "return_value_cents": returns["value"],
         "voided_count": voided["count"],
         "voided_cents": voided["total"],
         "purchases_cents": purchases,
@@ -902,3 +944,287 @@ def notify_alert(alert_id: int) -> tuple[bool, str]:
         with db.tx() as conn:
             conn.execute("UPDATE stock_alerts SET status='notified', notified_at=? WHERE id=?", (db.now_str(), alert_id))
     return ok, message
+
+# --------------------------------------------------------------- people
+def delete_user(user_id: int, admin) -> str:
+    """Remove a user. Accounts with history are anonymised so receipts and payroll stay intact."""
+    if user_id == admin["id"]:
+        raise ValueError("You cannot delete your own account")
+    row = db.fetch_one("SELECT * FROM users WHERE id = ?", (user_id,))
+    if not row or row["is_deleted"]:
+        raise ValueError("User not found")
+    if row["role"] == "admin":
+        remaining = db.scalar(
+            "SELECT COUNT(*) FROM users WHERE role='admin' AND is_active=1 AND is_deleted=0 AND id <> ?", (user_id,)
+        )
+        if remaining < 1:
+            raise ValueError("At least one administrator must remain")
+    references = db.scalar(
+        "SELECT (SELECT COUNT(*) FROM sales WHERE cashier_id = ?) "
+        "+ (SELECT COUNT(*) FROM quotations WHERE created_by = ?) "
+        "+ (SELECT COUNT(*) FROM discounts WHERE requested_by = ? OR approved_by = ?) "
+        "+ (SELECT COUNT(*) FROM payroll WHERE user_id = ?) "
+        "+ (SELECT COUNT(*) FROM stock_requests WHERE requested_by = ? OR decided_by = ?) "
+        "+ (SELECT COUNT(*) FROM cash_transactions WHERE user_id = ?) "
+        "+ (SELECT COUNT(*) FROM stock_movements WHERE user_id = ?) "
+        "+ (SELECT COUNT(*) FROM audit_log WHERE user_id = ?)",
+        (user_id,) * 10,
+    )
+    with db.tx() as conn:
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        if references == 0:
+            conn.execute("UPDATE stock_alerts SET created_by = NULL WHERE created_by = ?", (user_id,))
+            conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            return "deleted"
+        # Keep the row (and therefore every historical reference) but take the account out of service.
+        conn.execute(
+            "UPDATE users SET is_deleted = 1, is_active = 0, password_hash = ?, username = ? WHERE id = ?",
+            (security.hash_password(secrets.token_urlsafe(32)), f"{row['username']}~deleted{user_id}", user_id),
+        )
+    return "anonymised"
+
+
+def team_members(include_deleted: bool = False) -> list[dict]:
+    clause = "" if include_deleted else "WHERE u.is_deleted = 0"
+    rows = db.fetch_all(
+        "SELECT u.*, (SELECT COUNT(*) FROM sales s WHERE s.cashier_id = u.id) AS sales_count FROM users u "
+        f"{clause} ORDER BY u.role, u.username"
+    )
+    return [dict(r) for r in rows]
+
+
+# --------------------------------------------------------------- payroll
+SALARY_METHODS = ("cash", "bank", "mobile")
+
+
+def pay_salary(*, user_id: int, amount_cents: int, period: str, method: str, note: str, admin_id: int) -> dict:
+    if amount_cents <= 0:
+        raise ValueError("Salary amount must be greater than zero")
+    if not PERIOD_RE.match(period or ""):
+        raise ValueError("Choose the month the salary is for")
+    if method not in SALARY_METHODS:
+        raise ValueError("Choose cash, bank or mobile money")
+    target = db.fetch_one("SELECT * FROM users WHERE id = ? AND is_deleted = 0", (user_id,))
+    if not target:
+        raise ValueError("Choose a team member to pay")
+    stamp = db.now_str()
+    with db.tx() as conn:
+        cur = conn.execute(
+            "INSERT INTO payroll(user_id, period, amount_cents, method, reference, note, paid_by, created_at) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (user_id, period, amount_cents, method, "", note.strip(), admin_id, stamp),
+        )
+        payroll_id = int(cur.lastrowid)
+        reference = f"SAL-{period.replace('-', '')}-{payroll_id:03d}"
+        conn.execute("UPDATE payroll SET reference = ? WHERE id = ?", (reference, payroll_id))
+        conn.execute(
+            "INSERT INTO cash_transactions(kind, amount_cents, method, reference, note, user_id, created_at) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (
+                "salary",
+                -amount_cents,
+                method,
+                reference,
+                f"Salary {period} - {target['full_name']}"[:200],
+                admin_id,
+                stamp,
+            ),
+        )
+    return {"id": payroll_id, "reference": reference, "user": target["full_name"], "amount_cents": amount_cents}
+
+
+def salary_payments(limit: int = 200) -> list[dict]:
+    rows = db.fetch_all(
+        "SELECT p.*, u.full_name AS user_name, u.username, u.role, a.full_name AS paid_by_name FROM payroll p "
+        "JOIN users u ON u.id = p.user_id LEFT JOIN users a ON a.id = p.paid_by "
+        "ORDER BY p.created_at DESC, p.id DESC LIMIT ?",
+        (limit,),
+    )
+    return [dict(r) for r in rows]
+
+
+def salary_summary(period: str | None = None) -> dict:
+    period = period or db.current_period()
+    row = db.fetch_one(
+        "SELECT COALESCE(SUM(amount_cents),0) AS total_cents, COUNT(*) AS payments FROM payroll WHERE period = ?",
+        (period,),
+    )
+    by_person = db.fetch_all(
+        "SELECT u.full_name AS user_name, u.role, COALESCE(SUM(p.amount_cents),0) AS total_cents, COUNT(*) AS payments "
+        "FROM payroll p JOIN users u ON u.id = p.user_id WHERE p.period = ? GROUP BY u.id, u.full_name, u.role "
+        "ORDER BY total_cents DESC",
+        (period,),
+    )
+    return {
+        "period": period,
+        "total_cents": row["total_cents"],
+        "payments": row["payments"],
+        "by_person": [dict(r) for r in by_person],
+    }
+
+
+def salary_history_for(user_id: int, limit: int = 24) -> list[dict]:
+    rows = db.fetch_all(
+        "SELECT * FROM payroll WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?", (user_id, limit)
+    )
+    return [dict(r) for r in rows]
+
+
+# --------------------------------------------------------------- stock requests
+STOCK_REQUEST_KINDS = {
+    "breakage": -1,
+    "return": 1,
+    "correction": 0,
+}
+STOCK_REQUEST_LABELS = {
+    "breakage": "Breakage / write-off",
+    "return": "Customer return",
+    "correction": "Stock count correction",
+}
+
+
+def request_stock_change(*, product_id: int, kind: str, qty: int, reason: str, user, refund_cents: int = 0,
+                         direction: int = 0) -> dict:
+    if kind not in STOCK_REQUEST_KINDS:
+        raise ValueError("Choose breakage, return or correction")
+    if qty <= 0 or qty > 99999:
+        raise ValueError("Quantity must be between 1 and 99,999")
+    if not reason.strip():
+        raise ValueError("A reason is required for every stock change")
+    if refund_cents < 0:
+        raise ValueError("Refund cannot be negative")
+    if kind == "return" and refund_cents > 0 and not reason.strip():
+        raise ValueError("A reason is required for every stock change")
+    if kind != "return":
+        refund_cents = 0
+    row = product(product_id)
+    if not row:
+        raise ValueError("Choose a product")
+    if kind == "breakage":
+        step = -1
+    elif kind == "return":
+        step = 1
+    else:
+        step = 1 if direction >= 0 else -1
+    if step < 0 and row["stock_qty"] < qty:
+        raise ValueError(f"{row['name']} only has {row['stock_qty']} unit(s) on hand")
+    with db.tx() as conn:
+        cur = conn.execute(
+            "INSERT INTO stock_requests(kind, product_id, qty, direction, unit_cost_cents, refund_cents, reason, "
+            "status, requested_by, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (kind, product_id, qty, step, row["cost_cents"], refund_cents, reason.strip(), "pending", user["id"],
+             db.now_str()),
+        )
+        return {"id": int(cur.lastrowid), "step": step}
+
+
+def stock_requests_listing(status: str | None = "pending", user_id: int | None = None, limit: int = 100) -> list[dict]:
+    clause = []
+    params: list = []
+    if status and status != "all":
+        clause.append("r.status = ?")
+        params.append(status)
+    if user_id:
+        clause.append("r.requested_by = ?")
+        params.append(user_id)
+    where = f"WHERE {' AND '.join(clause)}" if clause else ""
+    rows = db.fetch_all(
+        "SELECT r.*, p.name AS product_name, p.sku, p.stock_qty, u.full_name AS requested_by_name, "
+        "a.full_name AS decided_by_name FROM stock_requests r JOIN products p ON p.id = r.product_id "
+        "LEFT JOIN users u ON u.id = r.requested_by LEFT JOIN users a ON a.id = r.decided_by "
+        f"{where} ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC LIMIT ?",
+        tuple(params + [limit]),
+    )
+    return [dict(r) for r in rows]
+
+
+def pending_stock_requests() -> int:
+    return db.scalar("SELECT COUNT(*) FROM stock_requests WHERE status = 'pending'")
+
+
+def decide_stock_change(request_id: int, admin, approve: bool, note: str = "", refund_cents: int | None = None) -> dict:
+    stamp = db.now_str()
+    with db.tx() as conn:
+        row = conn.execute("SELECT * FROM stock_requests WHERE id = ?", (request_id,)).fetchone()
+        if not row:
+            raise ValueError("Request not found")
+        if row["status"] != "pending":
+            raise ValueError("Only pending requests can be decided")
+        if not approve:
+            conn.execute(
+                "UPDATE stock_requests SET status='denied', decided_by=?, decided_at=?, admin_note=? WHERE id=?",
+                (admin["id"], stamp, note.strip(), request_id),
+            )
+            return {"status": "denied", "stock_qty": None}
+        prod = conn.execute("SELECT * FROM products WHERE id = ?", (row["product_id"],)).fetchone()
+        if not prod:
+            raise ValueError("The product no longer exists")
+        delta = row["qty"] * row["direction"]
+        new_qty = prod["stock_qty"] + delta
+        if new_qty < 0:
+            raise ValueError(f"That would take stock below zero ({prod['stock_qty']} on hand)")
+        movement_kind = {"breakage": "breakage", "return": "return"}.get(row["kind"], "adjustment")
+        reference = f"SR-{request_id:04d}"
+        conn.execute(
+            "INSERT INTO stock_movements(product_id, kind, qty_delta, unit_cost_cents, stock_after, reference, note, "
+            "user_id, created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (row["product_id"], movement_kind, delta, row["unit_cost_cents"], new_qty, reference,
+             row["reason"][:200], admin["id"], stamp),
+        )
+        conn.execute(
+            "UPDATE products SET stock_qty = ?, updated_at = ? WHERE id = ?", (new_qty, stamp, row["product_id"])
+        )
+        refund = row["refund_cents"] if refund_cents is None else max(0, refund_cents)
+        if row["kind"] != "return":
+            refund = 0
+        if refund:
+            conn.execute(
+                "INSERT INTO cash_transactions(kind, amount_cents, method, reference, note, user_id, created_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                ("customer_refund", -refund, "cash", reference, f"Customer return - {prod['name']}"[:200],
+                 admin["id"], stamp),
+            )
+        conn.execute(
+            "UPDATE stock_requests SET status='approved', decided_by=?, decided_at=?, admin_note=?, refund_cents=? "
+            "WHERE id=?",
+            (admin["id"], stamp, note.strip(), refund, request_id),
+        )
+        return {"status": "approved", "stock_qty": new_qty, "refund_cents": refund}
+
+
+def stock_request_stats() -> dict:
+    row = db.fetch_one(
+        "SELECT COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending, "
+        "COALESCE(SUM(CASE WHEN status='approved' THEN 1 ELSE 0 END),0) AS approved, "
+        "COALESCE(SUM(CASE WHEN status='denied' THEN 1 ELSE 0 END),0) AS denied FROM stock_requests"
+    )
+    return {"pending": row["pending"], "approved": row["approved"], "denied": row["denied"]}
+
+
+# --------------------------------------------------------------- cashier view
+def cashier_stats(user_id: int) -> dict:
+    """Only what a cashier needs to serve customers — no revenue, profit, stock value or cash figures."""
+    today = db.today_str()
+    own_today = db.scalar(
+        "SELECT COUNT(*) FROM sales WHERE cashier_id = ? AND status='completed' AND created_at >= ?",
+        (user_id, today + " 00:00:00"),
+    )
+    recent = db.fetch_all(
+        "SELECT s.* FROM sales s WHERE s.cashier_id = ? ORDER BY s.created_at DESC, s.id DESC LIMIT 8", (user_id,)
+    )
+    discounts = db.fetch_all(
+        "SELECT d.*, a.full_name AS approved_by_name FROM discounts d LEFT JOIN users a ON a.id = d.approved_by "
+        "WHERE d.requested_by = ? ORDER BY d.created_at DESC, d.id DESC LIMIT 6",
+        (user_id,),
+    )
+    requests = db.fetch_all(
+        "SELECT r.*, p.name AS product_name, p.sku FROM stock_requests r JOIN products p ON p.id = r.product_id "
+        "WHERE r.requested_by = ? ORDER BY r.created_at DESC, r.id DESC LIMIT 6",
+        (user_id,),
+    )
+    return {
+        "my_sales_today": own_today,
+        "recent_sales": [dict(r) for r in recent],
+        "my_discounts": [dict(r) for r in discounts],
+        "my_stock_requests": [dict(r) for r in requests],
+    }

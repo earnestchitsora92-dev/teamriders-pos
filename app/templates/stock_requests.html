@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Stock requests{% endblock %}
+{% block heading %}Stock requests{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Stock requests</h1>
+    <div class="sub">
+      {% if user.role == 'admin' %}
+      Breakages, customer returns and stock corrections. Nothing changes the shelf until you approve it.
+      {% else %}
+      Report a breakage or a customer return. The owner approves it before the stock figure changes.
+      {% endif %}
+    </div>
+  </div>
+  <div class="row">
+    {% for key, label in [('pending','Pending'), ('approved','Approved'), ('denied','Refused'), ('all','All')] %}
+    <a class="btn btn-sm {{ 'btn-dark' if status == key else 'btn-ghost' }}" href="/stock/requests?status={{ key }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid main-side">
+  <div class="card">
+    <div class="card-head">
+      <h3>{{ 'Requests' if user.role == 'admin' else 'My requests' }}</h3>
+      <span class="muted" style="font-size:12px">{{ rows|length }} shown</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th>Part</th><th>Type</th><th class="num">Qty</th><th>Reason</th>
+            {% if user.role == 'admin' %}<th>Raised by</th>{% endif %}
+            <th>Status</th><th>When</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>
+              <div class="cell-title">{{ r.product_name }}</div>
+              <div class="cell-sub">{{ r.sku }} · {{ r.stock_qty }} in stock</div>
+            </td>
+            <td>
+              <span class="badge {{ 'bad' if r.kind == 'breakage' else ('info' if r.kind == 'return' else '') }}">
+                {{ labels.get(r.kind, r.kind) }}
+              </span>
+            </td>
+            <td class="num">{{ '+' if r.direction > 0 else '−' }}{{ r.qty }}</td>
+            <td class="muted">{{ r.reason }}{% if r.refund_cents %}<div class="cell-sub">refund {{ r.refund_cents|money }}</div>{% endif %}</td>
+            {% if user.role == 'admin' %}
+            <td>{{ r.requested_by_name or '—' }}</td>
+            {% endif %}
+            <td>
+              <span class="badge {{ 'ok' if r.status == 'approved' else ('warn' if r.status == 'pending' else 'bad') }}">{{ r.status }}</span>
+              {% if r.admin_note %}<div class="cell-sub">{{ r.admin_note }}</div>{% endif %}
+            </td>
+            <td class="muted nowrap">{{ r.created_at|datefmt(true) }}</td>
+            <td class="right">
+              {% if user.role == 'admin' and r.status == 'pending' %}
+              <form method="post" action="/stock/requests/{{ r.id }}/decide" class="row" style="gap:6px;flex-wrap:nowrap;justify-content:flex-end">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                {% if r.kind == 'return' %}
+                <input name="refund" type="text" inputmode="decimal" placeholder="refund" value="{{ '%.2f'|format(r.refund_cents / 100) if r.refund_cents else '' }}" style="width:88px">
+                {% endif %}
+                <input name="note" type="text" placeholder="note" style="width:110px">
+                <button class="btn btn-sm btn-primary" name="decision" value="approve">Approve</button>
+                <button class="btn btn-sm btn-ghost" name="decision" value="deny">Refuse</button>
+              </form>
+              {% elif r.decided_at %}
+              <span class="muted" style="font-size:12px">{{ r.decided_by_name or '' }}<br>{{ r.decided_at|datefmt(true) }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="{{ 8 if user.role == 'admin' else 7 }}" class="empty">No requests in this view.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if user.role == 'admin' %}
+    <div class="card-foot row">
+      <span class="muted" style="font-size:12px">{{ stats.pending }} pending · {{ stats.approved }} approved · {{ stats.denied }} refused</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Raise a request</h3></div>
+    <div class="card-body">
+      <form method="post" action="/stock/requests" id="requestForm">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="product_id">Part</label>
+          <select id="product_id" name="product_id" required>
+            <option value="">Choose a part…</option>
+            {% for p in products %}
+            <option value="{{ p.id }}">{{ p.name }} — {{ p.sku }} ({{ p.stock_qty }} on hand)</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="kind">What happened</label>
+          <select id="kind" name="kind" required>
+            <option value="breakage">Breakage / write-off (stock decreases)</option>
+            <option value="return">Customer return (stock increases)</option>
+            <option value="correction">Stock count correction</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="qty">Quantity</label>
+          <input id="qty" name="qty" type="number" min="1" max="99999" value="1" required>
+        </div>
+        <div class="field" id="directionField" style="display:none">
+          <label for="direction">Correction direction</label>
+          <select id="direction" name="direction">
+            <option value="increase">Add to stock (found extra)</option>
+            <option value="decrease">Remove from stock (short)</option>
+          </select>
+        </div>
+        <div class="field" id="refundField" style="display:none">
+          <label for="refund">Refund the customer (optional)</label>
+          <input id="refund" name="refund" type="text" inputmode="decimal" placeholder="0.00">
+          <div class="hint">Leave empty for an exchange or credit note. A refund is paid out of the business cash when the owner approves.</div>
+        </div>
+        <div class="field">
+          <label for="reason">Reason</label>
+          <textarea id="reason" name="reason" rows="2" required placeholder="e.g. dropped while fitting, customer returned wrong size"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Send for approval</button>
+      </form>
+      <p class="hint" style="margin-top:12px">
+        Stock only moves when the owner approves. Approved breakages and returns appear in the stock ledger with their
+        reason, so shrinkage and returns can always be explained.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var kind = document.getElementById('kind');
+  var dir = document.getElementById('directionField');
+  var refund = document.getElementById('refundField');
+  function sync() {
+    dir.style.display = kind.value === 'correction' ? '' : 'none';
+    refund.style.display = kind.value === 'return' ? '' : 'none';
+  }
+  kind.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

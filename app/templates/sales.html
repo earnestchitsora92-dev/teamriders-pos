@@ -16,11 +16,15 @@
 </div>
 
 <div class="grid cols-3" style="margin-bottom:16px">
-  <div class="kpi tone-brand"><div class="kpi-label">Revenue in period</div><div class="kpi-value">{{ totals.revenue|money }}</div></div>
   {% if user.role == 'admin' %}
+  <div class="kpi tone-brand"><div class="kpi-label">Revenue in period</div><div class="kpi-value">{{ totals.revenue|money }}</div></div>
   <div class="kpi tone-ok"><div class="kpi-label">Gross profit in period</div><div class="kpi-value">{{ totals.profit|money }}</div></div>
-  {% endif %}
   <div class="kpi"><div class="kpi-label">Receipts</div><div class="kpi-value">{{ total }}</div></div>
+  {% else %}
+  <div class="kpi tone-brand"><div class="kpi-label">Your receipts in period</div><div class="kpi-value">{{ total }}</div></div>
+  <div class="kpi"><div class="kpi-label">To reprint</div><div class="kpi-value">Open a receipt</div><div class="kpi-sub">Then print or save it as PDF</div></div>
+  <div class="kpi"><div class="kpi-label">Need a price?</div><div class="kpi-value">Use the till</div><div class="kpi-sub">Search shows price and stock</div></div>
+  {% endif %}
 </div>
 
 <div class="card">
