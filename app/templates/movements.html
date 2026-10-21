@@ -17,7 +17,7 @@
       <label for="kind">Type</label>
       <select id="kind" name="kind">
         <option value="">All movements</option>
-        {% for k in ['initial', 'restock', 'sale', 'adjustment', 'void'] %}
+        {% for k in ['initial', 'restock', 'sale', 'adjustment', 'void', 'breakage', 'return'] %}
         <option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ k|capitalize }}</option>
         {% endfor %}
       </select>

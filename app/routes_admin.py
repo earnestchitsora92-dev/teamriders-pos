@@ -622,8 +622,21 @@ def _range_summary(start: str, end: str) -> dict:
         (start, end),
     )
     expenses = db.scalar(
-        "SELECT COALESCE(-SUM(amount_cents),0) FROM cash_transactions WHERE kind='expense' AND amount_cents < 0 "
-        "AND created_at >= ? AND created_at < ?",
+        "SELECT COALESCE(-SUM(amount_cents),0) FROM cash_transactions WHERE kind IN ('expense','salary') "
+        "AND amount_cents < 0 AND created_at >= ? AND created_at < ?",
+        (start, end),
+    )
+    salaries = db.scalar(
+        "SELECT COALESCE(SUM(amount_cents),0) FROM payroll WHERE created_at >= ? AND created_at < ?", (start, end)
+    )
+    breakage = db.fetch_one(
+        "SELECT COALESCE(SUM(-qty_delta),0) AS units, COALESCE(SUM(-qty_delta * unit_cost_cents),0) AS value "
+        "FROM stock_movements WHERE kind='breakage' AND created_at >= ? AND created_at < ?",
+        (start, end),
+    )
+    returns = db.fetch_one(
+        "SELECT COALESCE(SUM(qty_delta),0) AS units, COALESCE(SUM(qty_delta * unit_cost_cents),0) AS value "
+        "FROM stock_movements WHERE kind='return' AND created_at >= ? AND created_at < ?",
         (start, end),
     )
     cash = db.fetch_one(
@@ -645,7 +658,12 @@ def _range_summary(start: str, end: str) -> dict:
         "gross_profit_cents": sales["revenue"] - sales["cogs"],
         "tax_cents": sales["tax"],
         "expenses_cents": expenses,
+        "salaries_cents": salaries,
         "net_profit_cents": sales["revenue"] - sales["cogs"] - expenses,
+        "breakage_units": breakage["units"],
+        "breakage_cents": breakage["value"],
+        "return_units": returns["units"],
+        "return_value_cents": returns["value"],
         "cash_in_cents": cash["inflow"],
         "cash_out_cents": cash["outflow"],
         "purchases_cents": purchases,

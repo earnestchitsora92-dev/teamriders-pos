@@ -28,8 +28,26 @@
 <div class="grid cols-4" style="margin-bottom:16px">
   <div class="kpi tone-brand"><div class="kpi-label">Revenue</div><div class="kpi-value">{{ summary.revenue_cents|money }}</div><div class="kpi-sub">{{ summary.count }} sale(s) · avg {{ summary.average_sale_cents|money }}</div></div>
   <div class="kpi tone-ok"><div class="kpi-label">Gross profit</div><div class="kpi-value">{{ summary.gross_profit_cents|money }}</div><div class="kpi-sub">{{ summary.margin_percent }}% margin</div></div>
-  <div class="kpi tone-warn"><div class="kpi-label">Expenses</div><div class="kpi-value">{{ summary.expenses_cents|money }}</div><div class="kpi-sub">Discounts {{ summary.discounts_cents|money }}</div></div>
+  <div class="kpi tone-warn"><div class="kpi-label">Expenses</div><div class="kpi-value">{{ summary.expenses_cents|money }}</div><div class="kpi-sub">incl. salaries {{ summary.salaries_cents|money }} · discounts {{ summary.discounts_cents|money }}</div></div>
   <div class="kpi tone-brand"><div class="kpi-label">Net profit</div><div class="kpi-value">{{ summary.net_profit_cents|money }}</div><div class="kpi-sub">Cost of goods {{ summary.cogs_cents|money }}</div></div>
+</div>
+
+<div class="grid cols-3" style="margin-bottom:16px">
+  <div class="kpi">
+    <div class="kpi-label">Breakages written off</div>
+    <div class="kpi-value">{{ summary.breakage_cents|money }}</div>
+    <div class="kpi-sub">{{ summary.breakage_units }} unit(s) at cost</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Customer returns</div>
+    <div class="kpi-value">{{ summary.return_value_cents|money }}</div>
+    <div class="kpi-sub">{{ summary.return_units }} unit(s) back into stock</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Salaries paid</div>
+    <div class="kpi-value">{{ summary.salaries_cents|money }}</div>
+    <div class="kpi-sub">Part of the expenses above</div>
+  </div>
 </div>
 
 {% if daily %}

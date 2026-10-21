@@ -125,6 +125,12 @@ python scripts\deploy_render.py --repo-url https://github.com/<you>/teamriders-p
     --database-url "postgresql://…neon.tech/neondb?sslmode=require" --domain www.teamriders.bid --wait
 ```
 
+> **Shipping a change:** because the service pulls from a *public repository URL* (not a connected Git provider),
+> a `push_to_github.py` run does **not** start a deploy by itself. After every push, run
+> `python scripts\deploy_render.py --repo-url https://github.com/<you>/teamriders-pos` — it merges the existing
+> environment variables (so `DATABASE_URL` is kept) and triggers the deploy — or press **Manual Deploy** in the
+> Render dashboard.
+
 ### Step 5 — Point the domain at Render
 
 In Cloudflare DNS set these CNAMEs (Proxy status **DNS only** so Render can issue certificates):
@@ -149,14 +155,21 @@ curl https://www.teamriders.bid/healthz    # {"status":"ok", ...}
 | Search prices, sell, print receipts | ✅ | ✅ |
 | Create quotations | ✅ | ✅ |
 | Capture customer email when out of stock | ✅ | ✅ |
-| View own sales receipts | ✅ | ✅ |
-| View every sale, profit and cost | — | ✅ |
+| View own sales receipts (no cost or profit) | ✅ | ✅ |
+| See business takings, profit, stock value or cash | — | ✅ |
 | Apply discounts (with admin authorisation) | ✅ (needs approval) | ✅ |
-| Products: view | ✅ | ✅ |
-| Products: create / edit / archive | — | ✅ |
-| Restock, adjust stock, stock ledger | — | ✅ |
-| Business cash ledger | — | ✅ |
+| Report a breakage or a customer return | ✅ (needs approval) | ✅ |
+| See their own salary payments | ✅ | ✅ |
+| Products: view catalogue, cost, margins | — | ✅ |
+| Products: create / edit / delete / archive | — | ✅ |
+| Approve stock changes, restock, adjust stock, stock ledger | — | ✅ |
+| Business cash ledger and paying salaries | — | ✅ |
 | Monthly close-off, reports, users, activity log, settings | — | ✅ |
+| Delete a user account | — | ✅ |
+
+Cashiers see only what they need to serve a customer: the till, their own receipts, their own discount requests and
+the status of any breakage or return they reported. Every figure about how the business is doing — takings, profit,
+stock value, cash — is admin-only, on both the screens and the server routes.
 
 Passwords are hashed with scrypt; each user has an independent session (12 h, sliding). Every
 state-changing form is protected by a per-session CSRF token, and login attempts are throttled.
@@ -204,12 +217,20 @@ If a part has zero stock in sale mode, adding it opens a dialog to capture the c
 * **Restock** adds quantity, recalculates a weighted-average unit cost, logs the movement and can
   **deduct the purchase from business cash** (with supplier, invoice note and payment method).
 * **Adjust stock** handles damages, stock counts and corrections with a mandatory reason.
-* **Stock ledger** is the full audit trail: opening, restock, sale, adjustment, void.
+* **Stock requests** — anyone can raise a **breakage**, a **customer return** (with an optional refund) or a
+  **stock-count correction**. Nothing moves until an admin approves it; approval writes the ledger entry
+  (`breakage` / `return` / `adjustment`), and a return with a refund pays the customer out of business cash.
+  Refused requests stay on file with the admin's note.
+* **Stock ledger** is the full audit trail: opening, restock, sale, adjustment, void, breakage, return.
 
 ### Money in the business
 **Business cash** shows the running balance (all methods, plus per-method balances) built from:
-sale income, restock payments, refunds, operating expenses, owner withdrawals, capital injections
-and manual adjustments. System entries (sales/restock/refunds) cannot be deleted; manual ones can.
+sale income, restock payments, refunds, salaries, operating expenses, owner withdrawals, capital injections
+and manual adjustments. System entries (sales/restock/refunds/salaries) cannot be deleted; manual ones can.
+
+**Salaries** (admin) pays a team member for a chosen month by cash, bank or mobile money. The payment is
+written to the cash ledger as *Salary paid*, reduces the balance straight away, counts as an expense in the
+monthly close and is listed on that person's *Account* page.
 
 ### Monthly profit close-off
 **Monthly close** previews the selected month and locks a snapshot containing:

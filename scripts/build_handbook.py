@@ -1,4 +1,4 @@
-﻿"""Build the Team Riders POS handbook (PDF) for shop users and the technical team.
+"""Build the Team Riders POS handbook (PDF) for shop users and the technical team.
 
     python scripts/build_handbook.py [output-path]
 
@@ -310,22 +310,25 @@ def build() -> list:
         ["Search prices, sell, print or save receipts", "Yes", "Yes"],
         ["Create quotations", "Yes", "Yes"],
         ["Capture a customer's e-mail when an item is out of stock", "Yes", "Yes"],
-        ["See their own sales and reprint their own receipts", "Yes", "Yes"],
-        ["See every sale, the cost price and the profit", "No", "Yes"],
+        ["See their own receipts and reprint them (no cost, no profit)", "Yes", "Yes"],
+        ["Report a breakage, a customer return or a stock correction", "Request only", "Approve or refuse"],
+        ["See their own salary payments", "Yes", "Yes"],
+        ["See takings, profit, stock value, cash balance, cost prices", "No", "Yes"],
         ["Give a discount", "Request only", "Approve or refuse"],
-        ["View products and stock levels", "Yes", "Yes"],
-        ["Add, edit or archive products", "No", "Yes"],
+        ["Add, edit, delete or archive products", "No", "Yes"],
         ["Restock, adjust stock, read the stock ledger", "No", "Yes"],
-        ["Business cash ledger (money in / money out)", "No", "Yes"],
+        ["Business cash ledger and paying salaries", "No", "Yes"],
         ["Monthly close-off, reports, CSV exports", "No", "Yes"],
-        ["Team &amp; access, activity log, settings", "No", "Yes"],
+        ["Team &amp; access (create, disable, delete users)", "No", "Yes"],
+        ["Activity log and settings", "No", "Yes"],
     ], widths=[104, 33, 37]))
     story.append(gap(6))
     story.append(callout(
         "Why cashiers cannot see profit",
-        "Cost prices and margins are visible to the admin only, so a cashier can quote and sell without knowing "
-        "what the shop paid. Attempting an admin page while signed in as a cashier returns <i>Forbidden</i> — it is "
-        "not a bug.",
+        "A cashier's screens deliberately show no takings, no profit, no stock value and no cash balance — not even as "
+        "totals. They see the till, their own receipts, their own discount requests and the status of the breakages or "
+        "returns they reported. Cost prices, margins and every business figure stay with the admin, and the server "
+        "refuses those pages even if the address is typed by hand.",
     ))
 
     story += h1("3. Selling at the counter", "s3")
@@ -454,7 +457,35 @@ def build() -> list:
     story.append(para("Stock -> <b>Adjust</b> takes a signed quantity and a reason (“damaged in store”, “count "
                       "correction”). It never silently changes a price and it always appears in the ledger, so a "
                       "shrinkage pattern is visible instead of hidden."))
-    story.append(h2("4.5 What the stock is worth"))
+    story.append(h2("4.5 Breakages, returns and stock requests"))
+    story.append(para("A cashier cannot change stock, but they are the person who sees the damage or takes the return. "
+                      "So the shop runs on <b>requests</b>: anyone raises the change, the admin approves it, and only "
+                      "then does the shelf move."))
+    story.append(table([
+        ["Request type", "What it does on approval", "Typical use"],
+        ["Breakage / write-off", "Takes the quantity out of stock and records the loss at cost",
+         "A part dropped while fitting, a damaged tyre, a cracked mirror"],
+        ["Customer return", "Puts the quantity back into stock and, if you enter an amount, pays that refund out of "
+                            "business cash", "Wrong size bought yesterday, warranty replacement"],
+        ["Stock correction", "Adds or removes a quantity", "Stock-take found three more or two fewer than the system"],
+    ], widths=[34, 74, 66]))
+    story.append(gap(4))
+    story.append(numbered(1, "Open <b>Stock requests</b> in the sidebar (cashiers and admins both see it)."))
+    story.append(numbered(2, "Choose the part, what happened, the quantity and a reason — the reason is mandatory and "
+                             "is copied onto the stock ledger."))
+    story.append(numbered(3, "Press <b>Send for approval</b>. The request waits as <b>pending</b>; stock is untouched."))
+    story.append(numbered(4, "The admin opens the same page and presses <b>Approve</b> (optionally adding a refund and a "
+                             "note) or <b>Refuse</b>. The pending count also appears on the dashboard and in the "
+                             "sidebar badge."))
+    story.append(numbered(5, "Approval writes the ledger line, updates the quantity and, for a return with a refund, "
+                             "posts the money out of the cash ledger."))
+    story.append(gap(3))
+    story.append(callout(
+        "Why ask instead of allowing it",
+        "Every approved breakage is a cost the owner can see in the monthly report, and a refused request keeps its "
+        "reason and the admin's note on file. That is what stops stock quietly disappearing between counts.",
+    ))
+    story.append(h2("4.6 What the stock is worth"))
     story.append(table([
         ["Figure", "Where to find it", "What it means"],
         ["Stock at cost", "Dashboard / Stock levels", "Money tied up in the shelf, valued at cost price."],
@@ -470,12 +501,14 @@ def build() -> list:
                       "note; entries can be corrected by an adjustment with a reason."))
     story.append(table([
         ["Kind", "Direction", "Use it for"],
-        ["Operating expense", "Money out", "Rent, fuel, wages, workshop consumables, airtime."],
+        ["Operating expense", "Money out", "Rent, fuel, workshop consumables, airtime."],
+        ["Salary paid", "Money out", "Wages paid to a team member from the Salaries page (automatic)."],
         ["Owner withdrawal", "Money out", "Money the owner takes out of the business."],
         ["Capital injection", "Money in", "Money the owner puts in."],
         ["Adjustment", "Money in", "Corrections after a physical cash count."],
         ["Sale income", "Money in", "Created automatically by every completed sale."],
-        ["Refund", "Money out", "Created automatically when a sale is voided."],
+        ["Refund (voided sale)", "Money out", "Created automatically when a sale is voided."],
+        ["Customer return refund", "Money out", "Created automatically when a return with a refund is approved."],
     ], widths=[34, 22, 118]))
     story.append(gap(4))
     story.append(para("The balance shown is money in minus money out, overall and per method. That single number is "
@@ -487,10 +520,24 @@ def build() -> list:
                         "at the moment of sale."))
     story.append(bullet("<b>Gross profit</b> — revenue (excluding tax) minus COGS. Shown per sale, per part, per "
                         "category, per cashier and for any date range."))
-    story.append(bullet("<b>Net profit</b> — gross profit minus the operating expenses logged against the period."))
+    story.append(bullet("<b>Net profit</b> — gross profit minus the operating expenses logged against the period, "
+                        "<b>salaries included</b>."))
     story.append(bullet("<b>Discounts</b> are reported separately, so the owner can see exactly what discounting "
                         "cost, who approved it and why."))
-    story.append(h2("5.3 The monthly close"))
+    story.append(bullet("<b>Breakages</b> are shown at cost as their own figure, and <b>returns</b> show how many "
+                        "units came back — both kept out of the profit arithmetic so the numbers stay easy to explain."))
+    story.append(h2("5.3 Paying salaries"))
+    story.append(numbered(1, "Open <b>Salaries</b>. The page shows the month's total paid, the current business cash "
+                             "balance and every payment already made."))
+    story.append(numbered(2, "Choose the person, the amount, the month it is for, whether it was paid by cash, bank or "
+                             "mobile money, and an optional note."))
+    story.append(numbered(3, "Press <b>Pay from business cash</b>. The money leaves the cash ledger immediately as "
+                             "<i>Salary paid</i> (reference such as <font face='Courier' size='7.6'>SAL-202610-002"
+                             "</font>), counts as an expense in the monthly close, and appears on that person's own "
+                             "Account page."))
+    story.append(numbered(4, "A salary payment cannot be deleted from the cash ledger; if one is wrong, pay a "
+                             "correcting adjustment and note why."))
+    story.append(h2("5.4 The monthly close"))
     story.append(numbered(1, "<b>Monthly close -> Close this month.</b> The system freezes that month's figures into "
                              "a closing record: sales count, revenue, discounts, tax, COGS, gross profit, expenses, "
                              "net profit, purchases paid from cash, voided sales and the best-selling parts."))
@@ -505,7 +552,7 @@ def build() -> list:
         "after month end: open <i>Monthly close</i>, check revenue, COGS, gross and net against the drawer and the "
         "bank, then close and print the report.",
         kind="warn"))
-    story.append(h2("5.4 Reports and exports"))
+    story.append(h2("5.5 Reports and exports"))
     story.append(table([
         ["Report", "Answers"],
         ["Sales in a date range", "Every receipt: number, date, cashier, customer, subtotal, discount, tax, total, "
@@ -541,6 +588,10 @@ def build() -> list:
                         "password — one login per person, never a shared one."))
     story.append(bullet("Reset a forgotten password, or deactivate a user who has left. Deactivated users cannot "
                         "sign in but their sales stay in the records."))
+    story.append(bullet("<b>Delete</b> removes the account completely. If the person already has sales, quotations, "
+                        "discount decisions or salary payments, those rows are kept and the account is anonymised "
+                        "instead, so old receipts and payroll still make sense. A deleted user cannot sign in and "
+                        "disappears from the team list."))
     story.append(bullet("Passwords are stored only as scrypt hashes. Nobody — including the technical team — can read "
                         "an existing password; the only options are reset or deactivate."))
     story.append(h2("6.3 Activity log"))
@@ -647,6 +698,9 @@ def build() -> list:
         ["quotation_items", "Quote lines (same shape as sale items)"],
         ["stock_alerts", "Back-in-stock waiting list: product, customer e-mail/name/phone, note, status, notified_at"],
         ["cash_transactions", "Money in/out: kind, amount, method, reference, note, user, timestamp"],
+        ["payroll", "Salary payments: person, month, amount, method, reference (SAL-YYYYMM-NNN), who paid it"],
+        ["stock_requests", "Breakage / return / correction requests awaiting or carrying an admin decision, with the "
+                           "reason, direction, refund and decision note"],
         ["closings", "One row per closed month: the frozen figures plus a JSON snapshot and notes"],
         ["sequences", "Counters behind receipt and quotation numbers (per month)"],
         ["settings", "Key/value business configuration (see Appendix B)"],
@@ -666,6 +720,13 @@ def build() -> list:
                         "number."))
     story.append(bullet("<b>A closed month is frozen</b>: <font face='Courier' size='7.6'>void_sale</font> refuses "
                         "any receipt whose month has a closing record."))
+    story.append(bullet("<b>Stock changes need a decision.</b> A request only touches the shelf when an admin approves it; "
+                        "the ledger line, the new quantity and any refund are written in one transaction."))
+    story.append(bullet("<b>Salary payments are cash events.</b> Inserting a payroll row and its "
+                        "<font face='Courier' size='7.6'>cash_transactions</font> entry happens together, so the "
+                        "balance can never drift from the payment list."))
+    story.append(bullet("<b>Users with history are anonymised, not erased.</b> Deleting keeps the row (and every "
+                        "receipt it authorises) while scrambling the password and hiding the account."))
     story.append(bullet("<b>Deletes are avoided.</b> Products are archived, sales are voided, cash entries are "
                         "corrected by an adjustment — the history remains complete."))
     story.append(h2("8.3 How one backend flag changes everything"))
@@ -710,8 +771,11 @@ def build() -> list:
     story.append(numbered(2, "Publish with <font face='Courier' size='7.6'>python scripts/push_to_github.py --repo "
                              "teamriders-pos --message \"…\"</font> (no git install needed; the script uploads the "
                              "tree through the GitHub API)."))
-    story.append(numbered(3, "Render sees the new commit on <font face='Courier' size='7.6'>main</font> and rebuilds "
-                             "automatically. Watch it under the service's <i>Deploys</i> tab or <i>Logs</i>."))
+    story.append(numbered(3, "Render pulls the new commit and rebuilds. Because the service reads a <i>public "
+                             "repository URL</i> rather than a connected Git provider, the push alone does not start a "
+                             "build: trigger it with <font face='Courier' size='7.6'>python scripts/deploy_render.py "
+                             "--repo-url &lt;repo&gt;</font> (it merges the existing environment variables, so "
+                             "DATABASE_URL is kept) or press <i>Manual Deploy</i> in the dashboard."))
     story.append(numbered(4, "Verify: <font face='Courier' size='7.6'>curl https://www.teamriders.bid/healthz</font> "
                              "and sign in."))
     story.append(numbered(5, "Roll back by choosing the previous successful deploy in Render and clicking "
@@ -720,12 +784,15 @@ def build() -> list:
     story.append(table([
         ["Script", "What it does"],
         ["scripts/push_to_github.py", "Creates/updates the GitHub repository from the working tree via the API."],
-        ["scripts/deploy_render.py", "Creates or updates the Render service, sets env vars, attaches domains, "
+        ["scripts/deploy_render.py", "Creates or updates the Render service, merges env vars, attaches domains and "
                                      "triggers a deploy (needs RENDER_API_KEY)."],
         ["scripts/migrate_to_postgres.py", "Copies a SQLite database into PostgreSQL, preserving IDs and resetting "
                                            "sequences; skips sessions."],
-        ["scripts/pg_smoke_test.py", "35 end-to-end checks (auth, products, stock, discounts, sales, quotations, "
-                                     "cash, closings, reports, alerts) against whichever backend DATABASE_URL selects."],
+        ["scripts/pg_smoke_test.py", "55 service-layer checks (auth, products, stock, discounts, sales, quotations, "
+                                     "cash, closings, reports, alerts, stock requests, salaries, deletions) against "
+                                     "whichever backend DATABASE_URL selects."],
+        ["scripts/http_smoke_test.py", "38 HTTP checks against a running instance: setup, logins, cashier restrictions, "
+                                       "stock approval, salary payment, user and product deletion."],
         ["scripts/build_handbook.py", "Regenerates this PDF from the current source tree."],
     ], widths=[52, 122]))
 
@@ -909,13 +976,16 @@ def build() -> list:
         ["/quotations, /quotations/{id}, /quotations/{id}.pdf", "any", "Quotation list, detail, PDF"],
         ["/discounts, /discounts/{id}/decide", "admin", "Approve or refuse discount requests"],
         ["/products, /products/new, /products/{id}/edit, /products/{id}/toggle", "admin", "Catalogue maintenance"],
+        ["/products/{id}/delete", "admin", "Delete a part (archived instead when it has sales history)"],
         ["/stock, /stock/movements, /stock/restock, /stock/adjust", "admin", "Levels, ledger, restock, adjustment"],
+        ["/stock/requests", "any", "Raise a breakage, return or correction request; admin approves or refuses"],
+        ["/salaries, /salaries/pay", "admin", "Pay a salary from business cash and see the payment history"],
         ["/alerts, /alerts/{id}/notify, /alerts/notify-ready", "admin", "Back-in-stock waiting list"],
         ["/cash, /cash/add, /cash/{id}/delete", "admin", "Business cash ledger"],
         ["/closings, /closings/close, /closings/{id}", "admin", "Monthly close-off and its report"],
         ["/reports, /reports/export/{sales|products|stock|discounts}.csv", "admin", "Period reporting and exports"],
         ["/settings, /settings/test-email", "admin", "Business configuration and SMTP test"],
-        ["/users, /users/new, /users/{id}/password, /users/{id}/toggle", "admin", "Team &amp; access"],
+        ["/users, /users/new, /users/{id}/password, /users/{id}/toggle, /users/{id}/delete", "admin", "Team &amp; access, including deleting an account"],
         ["/audit", "admin", "Activity log"],
         ["/account, /account/password", "any", "Own profile and password"],
     ], widths=[62, 22, 90], font=7.9))
@@ -942,12 +1012,15 @@ def build() -> list:
         ["users.role", "admin, cashier"],
         ["sales.status", "completed, voided"],
         ["sales.payment_method", "cash, mobile, card, bank"],
-        ["stock_movements.kind", "initial, sale, restock, adjustment, void"],
+        ["stock_movements.kind", "initial, sale, restock, adjustment, void, breakage, return"],
         ["discounts.kind", "percent, amount"],
         ["discounts.status", "pending, approved, denied, expired, used"],
         ["quotations.status", "draft, sent, accepted, rejected, cancelled, expired"],
         ["stock_alerts.status", "waiting, notified, cancelled"],
-        ["cash_transactions.kind", "expense, owner_withdrawal, capital_injection, adjustment, sale_income, refund"],
+        ["cash_transactions.kind", "expense, owner_withdrawal, capital_injection, adjustment, sale_income, refund, salary, customer_refund"],
+        ["stock_requests.kind", "breakage, return, correction"],
+        ["stock_requests.status", "pending, approved, denied"],
+        ["users.is_deleted", "0 active account, 1 deleted (anonymised, cannot sign in)"],
         ["cash_transactions.method", "cash, bank, mobile"],
     ], widths=[48, 126], font=8.2))
     story.append(gap(6))

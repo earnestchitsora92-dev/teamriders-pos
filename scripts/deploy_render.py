@@ -58,6 +58,20 @@ def find_service(key: str, name: str):
     return None
 
 
+def trigger_deploy(key: str, service_id: str, wait: bool = False) -> None:
+    deploy = call("POST", f"/services/{service_id}/deploys", key, {"clearCache": "do_not_clear"})
+    deploy_id = deploy.get("id", "")
+    print("Deploy triggered:", deploy_id)
+    if wait and deploy_id:
+        for _ in range(60):
+            time.sleep(10)
+            status = call("GET", f"/services/{service_id}/deploys/{deploy_id}", key)
+            state = status.get("status", "unknown")
+            print("  status:", state)
+            if state in ("live", "build_failed", "canceled", "update_failed"):
+                break
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Deploy the Team Riders POS to Render")
     parser.add_argument("--repo-url", required=True, help="GitHub repository URL (private or public)")
@@ -113,15 +127,25 @@ def main() -> int:
 
     service_id = service["id"]
 
-    env_vars = [
-        {"key": "PYTHON_VERSION", "value": "3.12.7"},
-        {"key": "PYTHONUNBUFFERED", "value": "1"},
-        {"key": "MX_SQLITE_JOURNAL", "value": "delete"},
-    ]
+    # Merge with the variables already on the service: this endpoint replaces the whole list.
+    existing = call("GET", f"/services/{service_id}/env-vars?limit=50", key)
+    merged: dict[str, str] = {}
+    for item in existing:
+        entry = item.get("envVar", item)
+        if entry.get("key"):
+            merged[entry["key"]] = entry.get("value", "")
+    merged.update({
+        "PYTHON_VERSION": "3.12.7",
+        "PYTHONUNBUFFERED": "1",
+        "MX_SQLITE_JOURNAL": "delete",
+    })
     if args.database_url:
-        env_vars.append({"key": "DATABASE_URL", "value": args.database_url})
-    call("PUT", f"/services/{service_id}/env-vars", key, env_vars)
-    print(f"Environment variables set ({'with' if args.database_url else 'without'} DATABASE_URL).")
+        merged["DATABASE_URL"] = args.database_url
+    if not merged.get("DATABASE_URL"):
+        raise SystemExit("DATABASE_URL is not set on the service — pass --database-url so the app keeps using PostgreSQL.")
+    call("PUT", f"/services/{service_id}/env-vars", key,
+         [{"key": k, "value": v} for k, v in merged.items()])
+    print(f"Environment variables set ({len(merged)} total, DATABASE_URL present).")
 
     if args.domain:
         try:
@@ -130,18 +154,7 @@ def main() -> int:
         except SystemExit as exc:
             print("Custom domain step skipped:", exc)
 
-    deploy = call("POST", f"/services/{service_id}/deploys", key, {"clearCache": "do_not_clear"})
-    deploy_id = deploy.get("id", "")
-    print("Deploy triggered:", deploy_id)
-
-    if args.wait and deploy_id:
-        for _ in range(60):
-            time.sleep(10)
-            status = call("GET", f"/services/{service_id}/deploys/{deploy_id}", key)
-            state = status.get("status", "unknown")
-            print("  status:", state)
-            if state in ("live", "build_failed", "canceled", "update_failed"):
-                break
+    trigger_deploy(key, service_id, wait=args.wait)
 
     detail = call("GET", f"/services/{service_id}", key)
     service = detail.get("service", detail)
