@@ -1,0 +1,17 @@
+name: Keep the shop app awake
+
+# Render's free tier sleeps after ~15 minutes without traffic, which makes the
+# first page load slow. This workflow pings the health check every 10 minutes
+# so the shop stays instantly available.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /healthz
+        run: |
+          curl --fail --silent --show-error --max-time 60 https://www.teamriders.bid/healthz
