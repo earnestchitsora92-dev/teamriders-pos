@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Back-in-stock alerts{% endblock %}
+{% block heading %}Back-in-stock alerts{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Customers waiting for stock</h1>
+    <div class="sub">Capture an email at the counter when a part is out of stock — notify them when it returns.</div>
+  </div>
+  <div class="row">
+    <form method="post" action="/alerts/notify-ready">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn btn-primary" type="submit">Send all ready notifications</button>
+    </form>
+    <a class="btn btn-ghost" href="/settings">Email settings</a>
+  </div>
+</div>
+
+<div class="row" style="margin-bottom:14px">
+  {% for s in ['waiting', 'notified', 'cancelled', 'all'] %}
+  <a class="btn btn-sm {{ 'btn-dark' if status == s else 'btn-ghost' }}" href="/alerts?status={{ s }}">
+    {{ s|capitalize }}{% if counts.get(s) %} ({{ counts.get(s) }}){% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Customer</th><th>Part</th><th class="num">Stock now</th><th>Captured</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for a in rows %}
+        <tr>
+          <td>
+            <div class="cell-title">{{ a.email }}</div>
+            <div class="cell-sub">{{ a.customer_name or 'No name' }}{% if a.phone %} · {{ a.phone }}{% endif %}</div>
+          </td>
+          <td><a href="/products/{{ a.product_id }}">{{ a.product_name }}</a><div class="cell-sub">{{ a.sku }} · {{ a.price_cents|money }}</div></td>
+          <td class="num">
+            {% if a.stock_qty > 0 %}<span class="badge ok">{{ a.stock_qty }}</span>{% else %}<span class="badge bad">0</span>{% endif %}
+          </td>
+          <td class="muted nowrap">{{ a.created_at|datefmt(true) }}</td>
+          <td>
+            <span class="badge {{ 'warn' if a.status == 'waiting' and a.stock_qty > 0 else ('ok' if a.status == 'notified' else '') }}">{{ a.status }}</span>
+            {% if a.notified_at %}<div class="cell-sub">{{ a.notified_at|datefmt(true) }}</div>{% endif %}
+          </td>
+          <td class="right nowrap">
+            {% if a.status == 'waiting' %}
+            <form method="post" action="/alerts/{{ a.id }}/notify" style="display:inline">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <button class="btn btn-sm {{ 'btn-ok' if a.stock_qty > 0 else 'btn-ghost' }}" {% if a.stock_qty <= 0 %}disabled title="Still out of stock"{% endif %}>Notify</button>
+            </form>
+            <form method="post" action="/alerts/{{ a.id }}/cancel" style="display:inline">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <button class="btn btn-sm btn-danger">Cancel</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty"><span class="big">🔔</span>No customers in this list.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-body" style="font-size:13px;color:#334155">
+    <strong>Tip:</strong> add SMTP details in <a href="/settings">Settings</a> and emails are sent automatically the moment a part is restocked.
+    Without email configured, the list stays here so you can call or message the customer.
+  </div>
+</div>
+{% endblock %}

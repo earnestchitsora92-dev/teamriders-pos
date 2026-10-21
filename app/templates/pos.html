@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}Point of Sale{% endblock %}
+{% block heading %}{{ 'New quotation' if mode == 'quote' else 'Point of sale' }}{% endblock %}
+{% block topbar %}
+<span class="badge {{ 'info' if mode == 'quote' else 'ok' }}">{{ 'Quotation mode' if mode == 'quote' else 'Sale mode' }}</span>
+<a class="btn btn-ghost btn-sm" href="{{ '/pos?mode=sale' if mode == 'quote' else '/pos?mode=quote' }}">
+  {{ 'Back to selling' if mode == 'quote' else '＋ Quotation' }}
+</a>
+{% endblock %}
+{% block content %}
+<div id="posRoot" data-mode="{{ mode }}" data-tax-rate="{{ tax_rate }}" data-tax-label="{{ settings.tax_label }}"
+     data-is-admin="{{ '1' if user.role == 'admin' else '0' }}">
+  <div class="pos-layout">
+    <div class="pos-main">
+      <div class="card">
+        <div class="card-body" style="padding-bottom:12px">
+          <div class="pos-search-wrap">
+            <span class="pos-search-icon">⌕</span>
+            <input id="posSearch" class="pos-search" type="search" autocomplete="off"
+                   placeholder="Search part name, SKU or bike model… (F2)"
+                   aria-label="Search products">
+            <div id="suggestions" class="suggestions" role="listbox"></div>
+          </div>
+          <div class="row" style="margin-top:9px;font-size:12px;color:var(--muted)">
+            <span>Try “brake”, “CG125”, “tyre”, or a SKU like “SPK-001”. Prices appear as you type.</span>
+            <div class="spacer"></div>
+            {% if mode == 'quote' %}
+            <span class="badge info">Quotation — stock is not deducted</span>
+            {% else %}
+            <span class="badge ok">Stock updates after each sale</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div id="posAlert" class="flash err" style="display:none;margin-top:14px"></div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-head">
+          <h3>Cart</h3>
+          <button id="clearBtn" class="mini-link" type="button">Clear cart</button>
+        </div>
+        <div id="cartList" class="cart-list"></div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-head"><h3>Customer &amp; notes</h3><span class="muted" style="font-size:12px">Optional</span></div>
+        <div class="card-body">
+          <div class="form-grid">
+            <div class="field" style="margin-bottom:10px">
+              <label for="customerName">Customer name</label>
+              <input id="customerName" type="text" placeholder="Walk-in customer">
+            </div>
+            <div class="field" style="margin-bottom:10px">
+              <label for="customerPhone">Phone</label>
+              <input id="customerPhone" type="tel" placeholder="+254 …">
+            </div>
+            <div class="field" style="margin-bottom:10px">
+              <label for="customerEmail">Email (for receipts / stock alerts)</label>
+              <input id="customerEmail" type="email" placeholder="name@example.com">
+            </div>
+            <div class="field" style="margin-bottom:10px">
+              <label for="saleNote">Note</label>
+              <input id="saleNote" type="text" placeholder="Bike model, job card, etc.">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="pos-side">
+      <div class="card">
+        <div class="card-head"><h3>Summary</h3></div>
+        <div class="totals">
+          <div class="total-line"><span>Subtotal</span><strong id="subtotalVal">{{ currency }}0.00</strong></div>
+          <div class="total-line" id="taxRow" style="display:none"><span id="taxLabel">{{ settings.tax_label }}</span><span id="taxVal">{{ currency }}0.00</span></div>
+          <div class="total-line grand"><span>Total</span><span id="grandTotal">{{ currency }}0.00</span></div>
+
+          <div class="discount-chip" id="discountChip" style="display:none;margin-top:10px">
+            <span class="chip-text"></span>
+            <button type="button" class="chip-remove" title="Remove discount">×</button>
+          </div>
+        </div>
+
+        <div class="card-body" style="border-top:1px solid var(--line);padding-top:14px">
+          <div id="paymentBlock" {% if mode == 'quote' %}style="display:none"{% endif %}>
+            <div class="label" style="margin-bottom:6px">Payment method</div>
+            <div class="pay-methods">
+              {% for m in payment_methods %}
+              <label>
+                <input type="radio" name="payMethod" value="{{ m }}" {% if loop.first %}checked{% endif %}>
+                <span>{{ m|capitalize }}</span>
+              </label>
+              {% endfor %}
+            </div>
+
+            <div id="tenderWrap" style="margin-top:12px">
+              <div class="field" style="margin-bottom:8px">
+                <label for="tendered">Cash received</label>
+                <div class="row" style="gap:8px;flex-wrap:nowrap">
+                  <input id="tendered" type="number" step="0.01" min="0" placeholder="0.00" style="flex:1">
+                  <button id="exactBtn" type="button" class="btn btn-ghost btn-sm">Exact</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="change-box" id="changeBox" style="margin-bottom:12px">
+              <span>Change due</span><strong id="changeVal">{{ currency }}0.00</strong>
+            </div>
+          </div>
+
+          <div class="row" style="gap:8px;flex-wrap:nowrap">
+            <input id="discountCodeInput" type="text" placeholder="Discount code" style="flex:1;text-transform:uppercase">
+            <button id="applyCodeBtn" type="button" class="btn btn-ghost btn-sm">Apply</button>
+          </div>
+          <button id="discountBtn" class="btn btn-ghost btn-block" type="button" style="margin-top:8px">🏷️ Apply discount</button>
+
+          <button id="checkoutBtn" class="btn btn-primary btn-block btn-lg" type="button" style="margin-top:12px"
+                  {% if mode != 'sale' %}hidden{% endif %}>Complete sale</button>
+          <button id="quoteBtn" class="btn btn-dark btn-block btn-lg" type="button" style="margin-top:12px"
+                  {% if mode != 'quote' %}hidden{% endif %}>Save quotation</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-body" style="font-size:12px;color:var(--muted)">
+          <strong style="color:var(--ink)">Counter shortcuts</strong>
+          <div style="margin-top:6px">F2 — jump to search · Enter — add highlighted part · Esc — close dialogs</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Discount authorisation -->
+  <div class="modal-backdrop" id="discountModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Discount authorisation</h2>
+        <button type="button" class="x" data-close-modal="discountModal">×</button>
+      </div>
+      <form id="discountForm">
+        <div class="modal-body">
+          <p class="hint" style="margin-bottom:14px">Every discount is logged with the reason, the cashier and the approving administrator.</p>
+          <div id="discountError" class="login-error" style="display:none"></div>
+          <div class="form-grid">
+            <div class="field">
+              <label for="discountType">Type</label>
+              <select id="discountType">
+                <option value="percent">Percentage (%)</option>
+                <option value="amount">Fixed amount ({{ currency }})</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="discountValue">Value</label>
+              <input id="discountValue" type="number" step="0.01" min="0.01" required>
+            </div>
+          </div>
+          <div class="field">
+            <label for="discountReason">Reason (required)</label>
+            <input id="discountReason" type="text" required placeholder="e.g. Damaged packaging, loyal customer">
+          </div>
+          <div id="discountSelfNote" style="display:none" class="hint">
+            You are signed in as an administrator, so this discount is approved under your name.
+          </div>
+          <div id="discountAdminFields">
+            <div class="form-grid">
+              <div class="field">
+                <label for="discountAdminUser">Admin username</label>
+                <input id="discountAdminUser" type="text" autocomplete="off" placeholder="Leave blank to send a request">
+              </div>
+              <div class="field">
+                <label for="discountAdminPass">Admin password</label>
+                <input id="discountAdminPass" type="password" autocomplete="off">
+              </div>
+            </div>
+            <p class="hint">Leave the admin credentials blank to send a pending request the administrator can approve later.</p>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" data-close-modal="discountModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Authorise discount</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Out of stock capture -->
+  <div class="modal-backdrop" id="oosModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Out of stock</h2>
+        <button type="button" class="x" data-close-modal="oosModal">×</button>
+      </div>
+      <form id="oosForm">
+        <div class="modal-body">
+          <p><strong id="oosProductName"></strong> is currently out of stock.</p>
+          <p class="hint" style="margin-bottom:14px">Capture the customer's email and we will notify them as soon as it is back. Expected price: <strong id="oosPrice"></strong>.</p>
+          <div id="oosError" class="login-error" style="display:none"></div>
+          <div id="oosSuccess" class="flash ok" style="display:none"></div>
+          <div class="field">
+            <label for="oosEmail">Customer email</label>
+            <input id="oosEmail" type="email" required placeholder="name@example.com">
+          </div>
+          <div class="form-grid">
+            <div class="field">
+              <label for="oosName">Customer name</label>
+              <input id="oosName" type="text">
+            </div>
+            <div class="field">
+              <label for="oosPhone">Phone</label>
+              <input id="oosPhone" type="tel">
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" data-close-modal="oosModal">Close</button>
+          <button type="submit" class="btn btn-primary">Add to waiting list</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Success -->
+  <div class="modal-backdrop" id="successModal">
+    <div class="modal">
+      <div class="modal-head"><h2 id="successTitle">Sale completed</h2><button type="button" class="x" data-close-modal="successModal">×</button></div>
+      <div class="modal-body">
+        <div class="stat-list">
+          <div class="stat-row"><span>Reference</span><strong id="successReceipt"></strong></div>
+          <div class="stat-row"><span>Total</span><strong id="successTotal"></strong></div>
+          <div class="stat-row" id="successChangeRow"><span>Change due</span><strong id="successChange"></strong></div>
+        </div>
+        <p class="hint" style="margin-top:12px">Print the receipt for the rider, or save it as a PDF. Receipts are always kept in Sales.</p>
+      </div>
+      <div class="modal-foot" style="flex-wrap:wrap">
+        <button type="button" class="btn btn-ghost" id="newSaleBtn">New sale</button>
+        <button type="button" class="btn btn-ghost js-open" id="viewBtn">View</button>
+        <button type="button" class="btn btn-ghost js-open" id="pdfBtn">PDF</button>
+        <button type="button" class="btn btn-primary js-open" id="printBtn">Print</button>
+      </div>
+    </div>
+  </div>
+
+  {% if prefill %}
+  <script type="application/json" id="posPrefill">{{ prefill|tojson }}</script>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/pos.js"></script>
+{% endblock %}

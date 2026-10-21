@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set up · Team Riders</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-card" style="max-width:480px">
+    <div class="auth-brand">
+      <div class="brand-mark">TR</div>
+      <div>
+        <strong>{{ settings.business_name }}</strong>
+        <span>First-time setup</span>
+      </div>
+    </div>
+    <h1>Create the owner account</h1>
+    <p class="sub">This administrator account manages stock, discounts, cash and monthly profit. You can add cashier accounts afterwards.</p>
+    {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+    <form method="post" action="/setup">
+      <div class="field">
+        <label for="business_name">Business name</label>
+        <input id="business_name" name="business_name" type="text" value="{{ settings.business_name }}">
+      </div>
+      <div class="field">
+        <label for="full_name">Your full name</label>
+        <input id="full_name" name="full_name" type="text" required>
+      </div>
+      <div class="field">
+        <label for="username">Admin username</label>
+        <input id="username" name="username" type="text" required minlength="3" autocapitalize="none" spellcheck="false">
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" required minlength="6">
+        </div>
+        <div class="field">
+          <label for="confirm">Confirm password</label>
+          <input id="confirm" name="confirm" type="password" required minlength="6">
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block btn-lg" type="submit">Create account &amp; start</button>
+    </form>
+    <div class="auth-foot">Demo spare-parts catalogue is loaded automatically. You can edit or remove it later.</div>
+  </div>
+</div>
+</body>
+</html>

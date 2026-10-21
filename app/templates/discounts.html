@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Discounts{% endblock %}
+{% block heading %}Discount control{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Discounts &amp; approvals</h1>
+    <div class="sub">Every discount is authorised by an administrator and permanently recorded.</div>
+  </div>
+  {% if pending_count %}<span class="badge warn" style="font-size:13px;padding:6px 12px">{{ pending_count }} request(s) awaiting approval</span>{% endif %}
+</div>
+
+<div class="grid cols-3" style="margin-bottom:16px">
+  <div class="kpi tone-warn"><div class="kpi-label">Discount value given</div><div class="kpi-value">{{ used_total|money }}</div><div class="kpi-sub">{{ frm }} → {{ to }}</div></div>
+  <div class="kpi tone-brand"><div class="kpi-label">Discount rate</div><div class="kpi-value">{{ discount_rate }}%</div><div class="kpi-sub">Of gross sales in period</div></div>
+  <div class="kpi"><div class="kpi-label">Authorisations in period</div><div class="kpi-value">{{ stats.count }}</div><div class="kpi-sub">{{ stats.total_cents|money }} approved value</div></div>
+</div>
+
+<div class="card">
+  <form class="toolbar" method="get" action="/discounts">
+    <div class="field"><label for="from">From</label><input id="from" type="date" name="from" value="{{ frm }}"></div>
+    <div class="field"><label for="to">To</label><input id="to" type="date" name="to" value="{{ to }}"></div>
+    <div class="field">
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        {% for s in ['all', 'pending', 'approved', 'used', 'denied', 'expired'] %}
+        <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-dark" type="submit">Filter</button>
+    <a class="btn btn-ghost" href="/discounts">Reset</a>
+    <div class="spacer"></div>
+    <a class="btn btn-ghost" href="/reports/export/discounts.csv?from={{ frm }}&to={{ to }}">Export CSV</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr><th>Date</th><th>Code</th><th>Cashier</th><th>Authorised by</th><th>Discount</th><th class="num">Value</th><th>Reason</th><th>Status</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for d in rows %}
+        <tr>
+          <td class="muted nowrap">{{ d.created_at|datefmt(true) }}</td>
+          <td class="cell-title">{{ d.code }}</td>
+          <td>{{ d.cashier_name }}</td>
+          <td>{{ d.approver_name or '—' }}</td>
+          <td>{% if d.kind == 'percent' %}{{ d.value }}%{% else %}{{ d.value|money }}{% endif %}</td>
+          <td class="num"><strong>{{ d.discount_cents|money }}</strong></td>
+          <td style="max-width:220px"><div class="cell-sub">{{ d.reason }}</div>{% if d.admin_note %}<div class="cell-sub">Admin: {{ d.admin_note }}</div>{% endif %}</td>
+          <td>
+            <span class="badge {{ 'warn' if d.status == 'pending' else ('ok' if d.status in ['approved','used'] else ('bad' if d.status == 'denied' else '')) }}">{{ d.status }}</span>
+            {% if d.receipt_no %}<div class="cell-sub"><a href="/sales?q={{ d.receipt_no }}">{{ d.receipt_no }}</a></div>{% endif %}
+          </td>
+          <td class="right nowrap">
+            {% if d.status == 'pending' %}
+            <form method="post" action="/discounts/{{ d.id }}/decide" style="display:inline">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="decision" value="approve">
+              <input type="hidden" name="note" value="">
+              <button class="btn btn-sm btn-ok" type="submit">Approve</button>
+            </form>
+            <form method="post" action="/discounts/{{ d.id }}/decide" style="display:inline">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="decision" value="deny">
+              <input type="hidden" name="note" value="">
+              <button class="btn btn-sm btn-danger" type="submit">Deny</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="empty"><span class="big">🏷️</span>No discount records in this period.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>How discounts work</h3></div>
+  <div class="card-body" style="font-size:13px;color:#334155">
+    <p><strong>1.</strong> A cashier applies a discount in the cart; the reason is mandatory.</p>
+    <p><strong>2.</strong> The administrator either enters their password at the counter (instant approval) or approves the pending request on this page.</p>
+    <p><strong>3.</strong> Each authorisation has a code and expires 30 minutes after approval; it can be used once. Approved-but-unused codes expire automatically.</p>
+    <p style="margin:0"><strong>4.</strong> Every code, reason, cashier and approving admin is stored on the sale and in this audit trail.</p>
+  </div>
+</div>
+{% endblock %}

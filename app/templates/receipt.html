@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Receipt {{ sale.receipt_no }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body style="background:#eef1f7">
+<div class="content" style="padding:22px">
+  <div class="no-print row" style="justify-content:center;margin-bottom:16px">
+    <a class="btn btn-ghost btn-sm" href="/sales/{{ sale.id }}">← Back to sale</a>
+    <button class="btn btn-primary btn-sm" onclick="window.print()">🖨 Print receipt</button>
+    <a class="btn btn-ghost btn-sm" href="/sales/{{ sale.id }}/receipt.pdf?size=thermal" target="_blank">PDF 80mm</a>
+    <a class="btn btn-ghost btn-sm" href="/sales/{{ sale.id }}/receipt.pdf?size=a4" target="_blank">PDF A4</a>
+  </div>
+
+  <div class="receipt-wrap">
+    <div class="receipt-paper">
+      <h2>{{ settings.business_name }}</h2>
+      <div class="center tiny">{{ settings.business_tagline }}</div>
+      <div class="center tiny">{{ settings.business_address }}</div>
+      <div class="center tiny">{{ settings.business_phone }}</div>
+      <div class="rule"></div>
+
+      <table>
+        <tr><td>Receipt</td><td class="r"><strong>{{ sale.receipt_no }}</strong></td></tr>
+        <tr><td>Date</td><td class="r">{{ sale.created_at }}</td></tr>
+        <tr><td>Cashier</td><td class="r">{{ sale.cashier_name }}</td></tr>
+        {% if sale.customer_name %}<tr><td>Customer</td><td class="r">{{ sale.customer_name }}</td></tr>{% endif %}
+        {% if sale.customer_phone %}<tr><td>Phone</td><td class="r">{{ sale.customer_phone }}</td></tr>{% endif %}
+      </table>
+
+      <div class="rule"></div>
+
+      <table>
+        <tr><td><strong>Item</strong></td><td class="r"><strong>Qty</strong></td><td class="r"><strong>Amount</strong></td></tr>
+        {% for it in items %}
+        <tr>
+          <td>{{ it.name }}<br><span class="tiny">{{ '%.2f'|format(it.unit_price_cents / 100) }} each</span></td>
+          <td class="r">{{ it.qty }}</td>
+          <td class="r">{{ '%.2f'|format(it.line_total_cents / 100) }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+
+      <div class="rule"></div>
+
+      <table class="totals">
+        <tr><td>Subtotal</td><td class="r">{{ '%.2f'|format(sale.subtotal_cents / 100) }}</td></tr>
+        {% if sale.discount_cents %}
+        <tr><td>Discount{% if sale.discount_code %} ({{ sale.discount_code }}){% endif %}</td><td class="r">-{{ '%.2f'|format(sale.discount_cents / 100) }}</td></tr>
+        {% endif %}
+        {% if sale.tax_cents %}
+        <tr><td>{{ settings.tax_label }}</td><td class="r">{{ '%.2f'|format(sale.tax_cents / 100) }}</td></tr>
+        {% endif %}
+        <tr class="grand"><td>TOTAL</td><td class="r">{{ currency }}{{ '%.2f'|format(sale.total_cents / 100) }}</td></tr>
+        {% if sale.payment_method == 'cash' %}
+        <tr><td>Tendered</td><td class="r">{{ '%.2f'|format(sale.tendered_cents / 100) }}</td></tr>
+        <tr><td>Change</td><td class="r">{{ '%.2f'|format(sale.change_cents / 100) }}</td></tr>
+        {% endif %}
+      </table>
+
+      <div class="rule"></div>
+      <div class="center tiny">Paid by {{ sale.payment_method|upper }}</div>
+      {% if sale.status == 'voided' %}<div class="center tiny" style="color:#b91c1c;font-weight:700">*** VOIDED SALE ***</div>{% endif %}
+      {% if sale.note %}<div class="center tiny">Note: {{ sale.note }}</div>{% endif %}
+      <div class="rule"></div>
+      <div class="center tiny">{{ settings.receipt_footer }}</div>
+      <div class="center tiny">{{ settings.business_phone }} · {{ settings.business_email }}</div>
+      <div class="center tiny" style="margin-top:6px;opacity:.7">Powered by {{ settings.business_name }} POS</div>
+    </div>
+  </div>
+</div>
+{% if autoprint %}
+<script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });</script>
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Team &amp; access{% endblock %}
+{% block heading %}Team &amp; access{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Team &amp; access</h1>
+    <div class="sub">Cashiers sell and raise quotations. Administrators control stock, discounts, cash and closings.</div>
+  </div>
+</div>
+
+<div class="grid main-side">
+  <div class="card">
+    <div class="card-head"><h3>Users</h3></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>User</th><th>Role</th><th>Sales</th><th>Last sign-in</th><th>Status</th><th>Reset password</th><th></th></tr></thead>
+        <tbody>
+        {% for u in users %}
+          <tr>
+            <td><div class="cell-title">{{ u.full_name }}</div><div class="cell-sub">@{{ u.username }}</div></td>
+            <td><span class="badge {{ 'brand' if u.role == 'admin' else 'info' }}">{{ u.role }}</span></td>
+            <td class="num">{{ u.sales_count }}</td>
+            <td class="muted nowrap">{{ u.last_login_at|datefmt(true) }}</td>
+            <td><span class="badge {{ 'ok' if u.is_active else 'bad' }}">{{ 'active' if u.is_active else 'disabled' }}</span></td>
+            <td>
+              <form method="post" action="/users/{{ u.id }}/password" class="row" style="gap:6px;flex-wrap:nowrap">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <input name="new_password" type="password" placeholder="New password" minlength="6" required style="min-width:130px">
+                <button class="btn btn-sm btn-ghost">Set</button>
+              </form>
+            </td>
+            <td class="right">
+              {% if u.id != user.id %}
+              <form method="post" action="/users/{{ u.id }}/toggle" data-confirm="{{ 'Disable this user?' if u.is_active else 'Enable this user?' }}">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <button class="btn btn-sm {{ 'btn-danger' if u.is_active else 'btn-ghost' }}">{{ 'Disable' if u.is_active else 'Enable' }}</button>
+              </form>
+              {% else %}
+              <span class="badge">you</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Add a user</h3></div>
+    <div class="card-body">
+      <form method="post" action="/users/new">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="full_name">Full name</label>
+          <input id="full_name" name="full_name" type="text" required>
+        </div>
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" required minlength="3" autocapitalize="none" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="role">Role</label>
+          <select id="role" name="role">
+            <option value="cashier">Cashier</option>
+            <option value="admin">Administrator</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="password">Temporary password</label>
+          <input id="password" name="password" type="password" required minlength="6">
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Create user</button>
+      </form>
+      <p class="hint" style="margin-top:12px">Share the password securely and ask the user to change it from “Account”.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

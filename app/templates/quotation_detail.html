@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ quote.quote_no }}{% endblock %}
+{% block heading %}Quotation {{ quote.quote_no }}{% endblock %}
+{% block topbar %}
+<a class="btn btn-ghost btn-sm" href="/quotations/{{ quote.id }}.pdf" target="_blank">Print / PDF</a>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ quote.quote_no }}</h1>
+    <div class="sub">{{ quote.created_at|datefmt(true) }} · prepared by {{ quote.created_by_name }}
+      <span class="badge {{ 'ok' if quote.status == 'accepted' else 'info' }}" style="margin-left:6px">{{ quote.status }}</span>
+    </div>
+  </div>
+  <div class="row">
+    <a class="btn btn-ghost" href="/quotations/{{ quote.id }}.pdf" target="_blank">PDF</a>
+    {% if quote.status not in ['accepted', 'cancelled'] %}
+    <a class="btn btn-primary" href="/pos?quote={{ quote.id }}">Convert to sale</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid main-side">
+  <div class="card">
+    <div class="card-head"><h3>Items</h3></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Part</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Line total</th></tr></thead>
+        <tbody>
+        {% for it in items %}
+          <tr>
+            <td><div class="cell-title">{{ it.name }}</div><div class="cell-sub">{{ it.sku }}</div></td>
+            <td class="num">{{ it.qty }}</td>
+            <td class="num">{{ it.unit_price_cents|money }}</td>
+            <td class="num"><strong>{{ it.line_total_cents|money }}</strong></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-foot">
+      <div class="stat-list">
+        <div class="stat-row"><span>Subtotal</span><strong>{{ quote.subtotal_cents|money }}</strong></div>
+        {% if quote.discount_cents %}<div class="stat-row"><span>Discount</span><strong class="neg-num">−{{ quote.discount_cents|money }}</strong></div>{% endif %}
+        {% if quote.tax_cents %}<div class="stat-row"><span>{{ settings.tax_label }}</span><strong>{{ quote.tax_cents|money }}</strong></div>{% endif %}
+        <div class="stat-row"><span><strong>Total</strong></span><strong style="font-size:16px">{{ quote.total_cents|money }}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head"><h3>Customer</h3></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>Name</dt><dd>{{ quote.customer_name }}</dd>
+          <dt>Phone</dt><dd>{{ quote.customer_phone or '—' }}</dd>
+          <dt>Email</dt><dd>{{ quote.customer_email or '—' }}</dd>
+          <dt>Valid until</dt><dd>{{ quote.valid_until or '—' }}</dd>
+          <dt>Note</dt><dd>{{ quote.note or '—' }}</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Update status</h3></div>
+      <div class="card-body">
+        <form method="post" action="/quotations/{{ quote.id }}/status">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              {% for s in ['draft', 'sent', 'accepted', 'rejected', 'cancelled', 'expired'] %}
+              <option value="{{ s }}" {% if quote.status == s %}selected{% endif %}>{{ s|capitalize }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-dark btn-block" type="submit">Save status</button>
+        </form>
+        {% if user.role == 'admin' %}
+        <form method="post" action="/quotations/{{ quote.id }}/delete" data-confirm="Delete this quotation permanently?" style="margin-top:10px">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-danger btn-block" type="submit">Delete quotation</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

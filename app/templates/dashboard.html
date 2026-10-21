@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block heading %}Dashboard{% endblock %}
+{% block content %}
+{% set hour = now().hour %}
+{% set greeting = 'Good morning' if hour < 12 else ('Good afternoon' if hour < 17 else 'Good evening') %}
+<div class="page-head">
+  <div>
+    <h1>{{ greeting }}, {{ user.full_name.split(' ')[0] }}</h1>
+    <div class="sub">{{ now().strftime('%A, %d %B %Y') }} · {{ 'Owner' if user.role == 'admin' else 'Cashier' }} view</div>
+  </div>
+  <div class="row">
+    <a class="btn btn-ghost" href="/quotations">Quotations</a>
+    <a class="btn btn-primary" href="/pos">Open point of sale</a>
+  </div>
+</div>
+
+{% if user.role == 'admin' %}
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi tone-brand">
+    <div class="kpi-label">Today's sales</div>
+    <div class="kpi-value">{{ stats.today.revenue|money }}</div>
+    <div class="kpi-sub">{{ stats.today.count }} transaction(s) today</div>
+  </div>
+  <div class="kpi tone-ok">
+    <div class="kpi-label">Today's profit</div>
+    <div class="kpi-value">{{ stats.today.profit|money }}</div>
+    <div class="kpi-sub">After cost of goods sold</div>
+  </div>
+  <div class="kpi tone-warn">
+    <div class="kpi-label">This month</div>
+    <div class="kpi-value">{{ stats.month.revenue|money }}</div>
+    <div class="kpi-sub">{{ stats.month.count }} sales · {{ stats.month.discounts|money }} discounts</div>
+  </div>
+  <div class="kpi tone-brand">
+    <div class="kpi-label">Business cash</div>
+    <div class="kpi-value">{{ stats.cash.balance_cents|money }}</div>
+    <div class="kpi-sub">Stock at cost: {{ stats.stock.cost_value_cents|money }}</div>
+  </div>
+</div>
+{% else %}
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi tone-brand">
+    <div class="kpi-label">Today's sales</div>
+    <div class="kpi-value">{{ stats.today.revenue|money }}</div>
+    <div class="kpi-sub">{{ stats.today.count }} transaction(s)</div>
+  </div>
+  <div class="kpi tone-ok">
+    <div class="kpi-label">This month</div>
+    <div class="kpi-value">{{ stats.month.revenue|money }}</div>
+    <div class="kpi-sub">{{ stats.month.count }} sales recorded</div>
+  </div>
+  <div class="kpi tone-warn">
+    <div class="kpi-label">Low stock alerts</div>
+    <div class="kpi-value">{{ stats.stock.low_count }}</div>
+    <div class="kpi-sub">{{ stats.stock.out_count }} item(s) out of stock</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Parts on hand</div>
+    <div class="kpi-value">{{ stats.stock.units|qty }}</div>
+    <div class="kpi-sub">Across {{ stats.stock.skus }} product(s)</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid main-side" style="margin-bottom:16px">
+  <div class="card">
+    <div class="card-head">
+      <h2>{{ 'Top performing parts this month' if user.role == 'admin' else 'Recent sales' }}</h2>
+      {% if user.role == 'admin' %}<a class="mini-link" href="/reports">Full report</a>{% endif %}
+    </div>
+    {% if user.role == 'admin' %}
+      {% if stats.top_products %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Part</th><th class="num">Sold</th><th class="num">Revenue</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
+          <tbody>
+          {% for p in stats.top_products %}
+            <tr>
+              <td><div class="cell-title">{{ p.name }}</div><div class="cell-sub">{{ p.sku }}</div></td>
+              <td class="num">{{ p.qty }}</td>
+              <td class="num">{{ p.revenue_cents|money }}</td>
+              <td class="num pos-num">{{ p.profit_cents|money }}</td>
+              <td class="num">{{ p.margin_percent }}%</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty"><span class="big">📈</span>No sales recorded this month yet.</div>
+      {% endif %}
+    {% else %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Receipt</th><th>Cashier</th><th class="num">Total</th><th>When</th></tr></thead>
+          <tbody>
+          {% for s in stats.recent_sales %}
+            <tr>
+              <td><a href="/sales/{{ s.id }}">{{ s.receipt_no }}</a></td>
+              <td>{{ s.cashier_name }}</td>
+              <td class="num">{{ s.total_cents|money }}</td>
+              <td class="muted">{{ s.created_at|datefmt(true) }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="4" class="empty">No sales yet today.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Restock attention</h3>
+      {% if user.role == 'admin' %}<a class="mini-link" href="/stock?stock=low">Open stock</a>{% endif %}
+    </div>
+    <div class="card-body tight">
+      <ul class="list-plain">
+        {% for p in stats.low_stock %}
+        <li>
+          <div style="min-width:0">
+            <div class="cell-title">{{ p.name }}</div>
+            <div class="cell-sub">{{ p.sku }}</div>
+          </div>
+          <div class="spacer"></div>
+          <span class="badge {{ 'bad' if p.stock_qty <= 0 else 'warn' }}">{{ p.stock_qty }} left</span>
+        </li>
+        {% else %}
+        <li class="muted">Everything is above its reorder level.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% if user.role == 'admin' %}
+    <div class="card-foot row">
+      <span class="muted" style="font-size:12px">Stock value (cost): <strong>{{ stats.stock.cost_value_cents|money }}</strong></span>
+      <div class="spacer"></div>
+      <a class="btn btn-sm btn-ghost" href="/stock/restock">Restock</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if user.role == 'admin' %}
+<div class="grid cols-2" style="margin-bottom:16px">
+  <div class="card">
+    <div class="card-head"><h3>Money in the business</h3><a class="mini-link" href="/cash">Cash ledger</a></div>
+    <div class="card-body">
+      <div class="stat-list">
+        <div class="stat-row"><span>Cash balance</span><strong>{{ stats.cash.balance_cents|money }}</strong></div>
+        <div class="stat-row"><span>Total money in</span><strong class="pos-num">{{ stats.cash.inflow_cents|money }}</strong></div>
+        <div class="stat-row"><span>Total money out</span><strong class="neg-num">{{ stats.cash.outflow_cents|money }}</strong></div>
+        <div class="stat-row"><span>Potential margin in stock</span><strong>{{ stats.stock.potential_margin_cents|money }}</strong></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        {% for m in stats.cash.by_method %}
+        <span class="badge info">{{ m.method|capitalize }}: {{ m.balance|money }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>Needs your attention</h3></div>
+    <div class="card-body">
+      <div class="stat-list">
+        <div class="stat-row">
+          <span><a href="/discounts">Discount approvals pending</a></span>
+          <strong>{% if stats.pending_discounts %}<span class="badge warn">{{ stats.pending_discounts }}</span>{% else %}0{% endif %}</strong>
+        </div>
+        <div class="stat-row">
+          <span><a href="/alerts">Customers waiting for stock</a></span>
+          <strong>{% if stats.waiting_alerts %}<span class="badge warn">{{ stats.waiting_alerts }}</span>{% else %}0{% endif %}</strong>
+        </div>
+        <div class="stat-row">
+          <span><a href="/stock?stock=low">Parts at or below reorder level</a></span>
+          <strong>{{ stats.stock.low_count }}</strong>
+        </div>
+        <div class="stat-row">
+          <span><a href="/stock?stock=out">Parts out of stock</a></span>
+          <strong>{{ stats.stock.out_count }}</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-head"><h3>Latest receipts</h3><a class="mini-link" href="/sales">All sales</a></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Receipt</th><th>Cashier</th><th>Customer</th><th>Status</th><th class="num">Total</th><th>When</th></tr></thead>
+      <tbody>
+      {% for s in stats.recent_sales %}
+        <tr>
+          <td><a href="/sales/{{ s.id }}">{{ s.receipt_no }}</a></td>
+          <td>{{ s.cashier_name }}</td>
+          <td>{{ s.customer_name or '—' }}</td>
+          <td><span class="badge {{ 'bad' if s.status == 'voided' else 'ok' }}">{{ s.status }}</span></td>
+          <td class="num">{{ s.total_cents|money }}</td>
+          <td class="muted">{{ s.created_at|datefmt(true) }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">No sales recorded yet. <a href="/pos">Open the point of sale</a> to start selling.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

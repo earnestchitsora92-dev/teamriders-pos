@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block heading %}Reports{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Performance &amp; profit</h1>
+    <div class="sub">{{ frm }} → {{ to }}</div>
+  </div>
+  <div class="row">
+    <a class="btn btn-ghost" href="/reports/export/sales.csv?from={{ frm }}&to={{ to }}">Sales CSV</a>
+    <a class="btn btn-ghost" href="/reports/export/products.csv?from={{ frm }}&to={{ to }}">Products CSV</a>
+    <a class="btn btn-ghost" href="/reports/export/discounts.csv?from={{ frm }}&to={{ to }}">Discounts CSV</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <form class="toolbar" method="get" action="/reports">
+    <div class="field"><label for="from">From</label><input id="from" type="date" name="from" value="{{ frm }}"></div>
+    <div class="field"><label for="to">To</label><input id="to" type="date" name="to" value="{{ to }}"></div>
+    <button class="btn btn-dark" type="submit">Update report</button>
+    <a class="btn btn-ghost" href="/reports">This month</a>
+    <div class="spacer"></div>
+    <a class="btn btn-ghost" href="/reports/export/stock.csv">Stock valuation CSV</a>
+  </form>
+</div>
+
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi tone-brand"><div class="kpi-label">Revenue</div><div class="kpi-value">{{ summary.revenue_cents|money }}</div><div class="kpi-sub">{{ summary.count }} sale(s) · avg {{ summary.average_sale_cents|money }}</div></div>
+  <div class="kpi tone-ok"><div class="kpi-label">Gross profit</div><div class="kpi-value">{{ summary.gross_profit_cents|money }}</div><div class="kpi-sub">{{ summary.margin_percent }}% margin</div></div>
+  <div class="kpi tone-warn"><div class="kpi-label">Expenses</div><div class="kpi-value">{{ summary.expenses_cents|money }}</div><div class="kpi-sub">Discounts {{ summary.discounts_cents|money }}</div></div>
+  <div class="kpi tone-brand"><div class="kpi-label">Net profit</div><div class="kpi-value">{{ summary.net_profit_cents|money }}</div><div class="kpi-sub">Cost of goods {{ summary.cogs_cents|money }}</div></div>
+</div>
+
+{% if daily %}
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h3>Daily revenue</h3><span class="muted" style="font-size:12px">{{ daily|length }} day(s) with sales</span></div>
+  <div class="card-body">
+    {% for d in daily %}
+    <div class="bar-row">
+      <span class="muted">{{ d.day[5:] }}</span>
+      <div class="bar-track"><div class="bar-fill" style="width: {{ ((d.revenue / max_daily) * 100)|round(1) if max_daily else 0 }}%"></div></div>
+      <span class="bar-val">{{ d.revenue|money }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="grid cols-2" style="margin-bottom:16px">
+  <div class="card">
+    <div class="card-head"><h3>Top performing parts</h3><span class="muted" style="font-size:12px">by profit</span></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Part</th><th class="num">Sold</th><th class="num">Revenue</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
+        <tbody>
+        {% for p in top %}
+          <tr>
+            <td><div class="cell-title">{{ p.name }}</div><div class="cell-sub">{{ p.sku }}</div></td>
+            <td class="num">{{ p.qty }}</td>
+            <td class="num">{{ p.revenue_cents|money }}</td>
+            <td class="num pos-num">{{ p.profit_cents|money }}</td>
+            <td class="num">{{ p.margin_percent }}%</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="empty">No sales in this period.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Sales by category</h3></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Category</th><th class="num">Units</th><th class="num">Revenue</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
+        <tbody>
+        {% for c in categories %}
+          <tr>
+            <td class="cell-title">{{ c.category }}</td>
+            <td class="num">{{ c.qty }}</td>
+            <td class="num">{{ c.revenue_cents|money }}</td>
+            <td class="num pos-num">{{ c.profit_cents|money }}</td>
+            <td class="num">{{ c.margin_percent }}%</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="empty">No sales in this period.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head"><h3>Sales by cashier</h3></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Cashier</th><th class="num">Sales</th><th class="num">Revenue</th><th class="num">Profit</th><th class="num">Discounts</th></tr></thead>
+          <tbody>
+          {% for c in by_cashier %}
+            <tr>
+              <td class="cell-title">{{ c.cashier }}</td>
+              <td class="num">{{ c.count }}</td>
+              <td class="num">{{ c.revenue|money }}</td>
+              <td class="num pos-num">{{ c.profit|money }}</td>
+              <td class="num">{{ c.discounts|money }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="empty">No sales in this period.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Largest discounts</h3><a class="mini-link" href="/discounts">All discounts</a></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Date</th><th>Code</th><th>Cashier / admin</th><th class="num">Amount</th><th>Receipt</th></tr></thead>
+        <tbody>
+        {% for d in top_discounts %}
+          <tr>
+            <td class="muted nowrap">{{ d.created_at|datefmt }}</td>
+            <td>{{ d.code }}</td>
+            <td>{{ d.cashier_name }}<div class="cell-sub">approved by {{ d.approver_name or '—' }}</div></td>
+            <td class="num neg-num">{{ d.discount_cents|money }}</td>
+            <td>{% if d.receipt_no %}<a href="/sales?q={{ d.receipt_no }}">{{ d.receipt_no }}</a>{% else %}—{% endif %}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="empty">No discounts used in this period.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head"><h3>Cash flow by type</h3><a class="mini-link" href="/cash">Cash ledger</a></div>
+      <div class="card-body">
+        <div class="stat-list">
+          {% for c in cash_by_kind %}
+          <div class="stat-row"><span>{{ labels.get(c.kind, c.kind) }} <span class="muted">({{ c.n }} entries)</span></span>
+            <strong class="{{ 'pos-num' if c.total > 0 else 'neg-num' }}">{{ c.total|money }}</strong></div>
+          {% else %}
+          <p class="muted">No cash transactions in this period.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Stock position</h3></div>
+      <div class="card-body">
+        <div class="stat-list">
+          <div class="stat-row"><span>Stock value at cost</span><strong>{{ stock.cost_value_cents|money }}</strong></div>
+          <div class="stat-row"><span>Retail value</span><strong>{{ stock.retail_value_cents|money }}</strong></div>
+          <div class="stat-row"><span>Potential margin</span><strong class="pos-num">{{ stock.potential_margin_cents|money }}</strong></div>
+          <div class="stat-row"><span>Units on hand</span><strong>{{ stock.units|qty }}</strong></div>
+          <div class="stat-row"><span>Cash balance</span><strong>{{ summary.cash_in_cents|money }} in / {{ summary.cash_out_cents|money }} out</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

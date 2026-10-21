@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Closing {{ closing.period }}{% endblock %}
+{% block heading %}Closed month {{ closing.period }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ closing.period }} — closed</h1>
+    <div class="sub">Closed by {{ closing.closed_by_name }} on {{ closing.closed_at|datefmt(true) }}</div>
+  </div>
+  <div class="row">
+    <button class="btn btn-ghost" onclick="window.print()">Print summary</button>
+    <a class="btn btn-ghost" href="/closings">← All closings</a>
+  </div>
+</div>
+
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi tone-brand"><div class="kpi-label">Revenue</div><div class="kpi-value">{{ closing.revenue_cents|money }}</div><div class="kpi-sub">{{ closing.sales_count }} sale(s)</div></div>
+  <div class="kpi tone-ok"><div class="kpi-label">Gross profit</div><div class="kpi-value">{{ closing.gross_profit_cents|money }}</div><div class="kpi-sub">Discounts {{ closing.discounts_cents|money }}</div></div>
+  <div class="kpi tone-warn"><div class="kpi-label">Expenses</div><div class="kpi-value">{{ closing.expenses_cents|money }}</div></div>
+  <div class="kpi tone-brand"><div class="kpi-label">Net profit</div><div class="kpi-value">{{ closing.net_profit_cents|money }}</div></div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="card-head"><h3>Profit &amp; loss</h3></div>
+    <div class="card-body">
+      <div class="stat-list">
+        <div class="stat-row"><span>Sales revenue</span><strong>{{ closing.revenue_cents|money }}</strong></div>
+        <div class="stat-row"><span>Discounts given</span><strong class="neg-num">−{{ closing.discounts_cents|money }}</strong></div>
+        <div class="stat-row"><span>Cost of goods sold</span><strong>{{ closing.cogs_cents|money }}</strong></div>
+        <div class="stat-row"><span>Gross profit</span><strong class="pos-num">{{ closing.gross_profit_cents|money }}</strong></div>
+        <div class="stat-row"><span>Operating expenses</span><strong class="neg-num">−{{ closing.expenses_cents|money }}</strong></div>
+        <div class="stat-row"><span><strong>Net profit</strong></span><strong style="font-size:16px">{{ closing.net_profit_cents|money }}</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Stock &amp; cash</h3></div>
+    <div class="card-body">
+      <div class="stat-list">
+        <div class="stat-row"><span>Opening stock value</span><strong>{{ closing.opening_stock_value_cents|money }}</strong></div>
+        <div class="stat-row"><span>Stock purchases</span><strong>{{ closing.purchases_cents|money }}</strong></div>
+        <div class="stat-row"><span>Closing stock value</span><strong>{{ closing.closing_stock_value_cents|money }}</strong></div>
+        <div class="stat-row"><span>Money in</span><strong class="pos-num">{{ closing.cash_in_cents|money }}</strong></div>
+        <div class="stat-row"><span>Money out</span><strong class="neg-num">{{ closing.cash_out_cents|money }}</strong></div>
+        <div class="stat-row"><span><strong>Cash balance</strong></span><strong>{{ closing.cash_balance_cents|money }}</strong></div>
+      </div>
+      {% if closing.notes %}
+      <hr><p class="hint"><strong>Notes:</strong> {{ closing.notes }}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if snapshot.top_products %}
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>Top products in {{ closing.period }}</h3></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Part</th><th class="num">Qty sold</th><th class="num">Revenue</th><th class="num">Profit</th></tr></thead>
+      <tbody>
+      {% for p in snapshot.top_products %}
+        <tr>
+          <td><div class="cell-title">{{ p.name }}</div><div class="cell-sub">{{ p.sku }}</div></td>
+          <td class="num">{{ p.qty }}</td>
+          <td class="num">{{ p.revenue_cents|money }}</td>
+          <td class="num pos-num">{{ p.profit_cents|money }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

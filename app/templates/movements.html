@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Stock ledger{% endblock %}
+{% block heading %}Stock ledger{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Stock movements</h1>
+    <div class="sub">{{ total }} movement(s) · every sale, restock and adjustment is recorded here.</div>
+  </div>
+  <a class="btn btn-primary" href="/stock/restock">＋ Restock</a>
+</div>
+
+<div class="card">
+  <form class="toolbar" method="get" action="/stock/movements">
+    <div class="field grow"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}" placeholder="Product or reference"></div>
+    <div class="field">
+      <label for="kind">Type</label>
+      <select id="kind" name="kind">
+        <option value="">All movements</option>
+        {% for k in ['initial', 'restock', 'sale', 'adjustment', 'void'] %}
+        <option value="{{ k }}" {% if kind == k %}selected{% endif %}>{{ k|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-dark" type="submit">Filter</button>
+    <a class="btn btn-ghost" href="/stock/movements">Reset</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Part</th><th>Type</th><th class="num">Change</th><th class="num">Stock after</th><th class="num">Unit cost</th><th>By</th><th>Reference / note</th></tr></thead>
+      <tbody>
+      {% for m in rows %}
+        <tr>
+          <td class="muted nowrap">{{ m.created_at|datefmt(true) }}</td>
+          <td><a class="cell-title" href="/products/{{ m.product_id }}">{{ m.product_name }}</a><div class="cell-sub">{{ m.sku }}</div></td>
+          <td><span class="badge {{ 'ok' if m.qty_delta > 0 else 'warn' }}">{{ m.kind }}</span></td>
+          <td class="num {{ 'pos-num' if m.qty_delta > 0 else 'neg-num' }}">{{ '+' if m.qty_delta > 0 else '' }}{{ m.qty_delta }}</td>
+          <td class="num">{{ m.stock_after }}</td>
+          <td class="num">{{ m.unit_cost_cents|money }}</td>
+          <td>{{ m.user_name or 'system' }}</td>
+          <td class="cell-sub">{{ m.reference or '—' }}{% if m.note %} · {{ m.note }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="empty">No movements match this filter.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pages > 1 %}
+  <div class="pagination">
+    <span>Page {{ page }} of {{ pages }}</span>
+    {% if page > 1 %}<a href="/stock/movements?q={{ q }}&kind={{ kind }}&page={{ page - 1 }}">Previous</a>{% endif %}
+    {% if page < pages %}<a href="/stock/movements?q={{ q }}&kind={{ kind }}&page={{ page + 1 }}">Next</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

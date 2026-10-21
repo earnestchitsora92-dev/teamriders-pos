@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: teamriders-pos
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --forwarded-allow-ips "*"
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: DATABASE_URL
+        sync: false
+      - key: MX_SQLITE_JOURNAL
+        value: delete
+      - key: PYTHONUNBUFFERED
+        value: "1"

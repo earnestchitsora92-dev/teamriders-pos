@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Sales{% endblock %}
+{% block heading %}Sales{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Sales &amp; receipts</h1>
+    <div class="sub">{{ total }} receipt(s) in this period{% if user.role != 'admin' %} · showing your sales only{% endif %}</div>
+  </div>
+  <div class="row">
+    {% if user.role == 'admin' %}
+    <a class="btn btn-ghost" href="/reports/export/sales.csv?from={{ frm }}&to={{ to }}">Export CSV</a>
+    {% endif %}
+    <a class="btn btn-primary" href="/pos">New sale</a>
+  </div>
+</div>
+
+<div class="grid cols-3" style="margin-bottom:16px">
+  <div class="kpi tone-brand"><div class="kpi-label">Revenue in period</div><div class="kpi-value">{{ totals.revenue|money }}</div></div>
+  {% if user.role == 'admin' %}
+  <div class="kpi tone-ok"><div class="kpi-label">Gross profit in period</div><div class="kpi-value">{{ totals.profit|money }}</div></div>
+  {% endif %}
+  <div class="kpi"><div class="kpi-label">Receipts</div><div class="kpi-value">{{ total }}</div></div>
+</div>
+
+<div class="card">
+  <form class="toolbar" method="get" action="/sales">
+    <div class="field"><label for="from">From</label><input id="from" type="date" name="from" value="{{ frm }}"></div>
+    <div class="field"><label for="to">To</label><input id="to" type="date" name="to" value="{{ to }}"></div>
+    <div class="field">
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+        <option value="completed" {% if status == 'completed' %}selected{% endif %}>Completed</option>
+        <option value="voided" {% if status == 'voided' %}selected{% endif %}>Voided</option>
+      </select>
+    </div>
+    <div class="field grow"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}" placeholder="Receipt, customer or phone"></div>
+    <button class="btn btn-dark" type="submit">Filter</button>
+    <a class="btn btn-ghost" href="/sales">Reset</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Receipt</th><th>Date</th><th>Cashier</th><th>Customer</th><th>Payment</th>
+          <th class="num">Discount</th><th class="num">Total</th>
+          {% if user.role == 'admin' %}<th class="num">Profit</th>{% endif %}
+          <th>Status</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for s in sales %}
+        <tr>
+          <td><a href="/sales/{{ s.id }}" class="cell-title">{{ s.receipt_no }}</a></td>
+          <td class="muted nowrap">{{ s.created_at|datefmt(true) }}</td>
+          <td>{{ s.cashier_name }}</td>
+          <td>{{ s.customer_name or '—' }}</td>
+          <td><span class="badge">{{ s.payment_method }}</span></td>
+          <td class="num">{% if s.discount_cents %}<span class="neg-num">−{{ s.discount_cents|money }}</span>{% else %}—{% endif %}</td>
+          <td class="num"><strong>{{ s.total_cents|money }}</strong></td>
+          {% if user.role == 'admin' %}<td class="num pos-num">{{ s.profit_cents|money }}</td>{% endif %}
+          <td><span class="badge {{ 'bad' if s.status == 'voided' else 'ok' }}">{{ s.status }}</span></td>
+          <td class="right nowrap">
+            <a class="btn btn-sm btn-ghost" href="/sales/{{ s.id }}/receipt" target="_blank">Receipt</a>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" class="empty"><span class="big">🧾</span>No sales match this filter.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pages > 1 %}
+  <div class="pagination">
+    <span>Page {{ page }} of {{ pages }}</span>
+    {% if page > 1 %}<a href="/sales?from={{ frm }}&to={{ to }}&status={{ status }}&q={{ q }}&page={{ page - 1 }}">Previous</a>{% endif %}
+    {% if page < pages %}<a href="/sales?from={{ frm }}&to={{ to }}&status={{ status }}&q={{ q }}&page={{ page + 1 }}">Next</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

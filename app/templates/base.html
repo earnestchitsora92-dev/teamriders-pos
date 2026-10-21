@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf }}">
+  <title>{% block title %}Dashboard{% endblock %} · {{ settings.business_name }}</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f172a'/%3E%3Ctext x='16' y='22' font-family='Arial' font-size='13' font-weight='bold' fill='%23f59e0b' text-anchor='middle'%3ETR%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">TR</div>
+      <div class="brand-text">
+        <strong>{{ settings.business_name }}</strong>
+        <span>Spares &amp; Service POS</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item {% if path == '/dashboard' %}active{% endif %}" href="/dashboard"><span class="ico">▦</span> Dashboard</a>
+      <a class="nav-item {% if path == '/pos' %}active{% endif %}" href="/pos"><span class="ico">🛒</span> Point of Sale</a>
+      <a class="nav-item {% if path.startswith('/sales') %}active{% endif %}" href="/sales"><span class="ico">🧾</span> Sales</a>
+      <a class="nav-item {% if path.startswith('/quotations') %}active{% endif %}" href="/quotations"><span class="ico">📄</span> Quotations</a>
+      <a class="nav-item {% if path.startswith('/products') %}active{% endif %}" href="/products"><span class="ico">📦</span> Products</a>
+
+      {% if user.role == 'admin' %}
+      <div class="nav-label">Stock control</div>
+      <a class="nav-item {% if path == '/stock' %}active{% endif %}" href="/stock"><span class="ico">📥</span> Stock levels</a>
+      <a class="nav-item {% if path == '/stock/movements' %}active{% endif %}" href="/stock/movements"><span class="ico">↕</span> Stock ledger</a>
+      <a class="nav-item {% if path.startswith('/alerts') %}active{% endif %}" href="/alerts"><span class="ico">🔔</span> Back-in-stock
+        {% if nav_alerts %}<span class="nav-badge">{{ nav_alerts }}</span>{% endif %}</a>
+
+      <div class="nav-label">Money</div>
+      <a class="nav-item {% if path.startswith('/discounts') %}active{% endif %}" href="/discounts"><span class="ico">🏷️</span> Discounts
+        {% if nav_discounts %}<span class="nav-badge warn">{{ nav_discounts }}</span>{% endif %}</a>
+      <a class="nav-item {% if path.startswith('/cash') %}active{% endif %}" href="/cash"><span class="ico">💵</span> Business cash</a>
+      <a class="nav-item {% if path.startswith('/closings') %}active{% endif %}" href="/closings"><span class="ico">📅</span> Monthly close</a>
+      <a class="nav-item {% if path.startswith('/reports') %}active{% endif %}" href="/reports"><span class="ico">📈</span> Reports</a>
+
+      <div class="nav-label">Administration</div>
+      <a class="nav-item {% if path.startswith('/users') %}active{% endif %}" href="/users"><span class="ico">👤</span> Team &amp; access</a>
+      <a class="nav-item {% if path.startswith('/audit') %}active{% endif %}" href="/audit"><span class="ico">🗒️</span> Activity log</a>
+      <a class="nav-item {% if path.startswith('/settings') %}active{% endif %}" href="/settings"><span class="ico">⚙️</span> Settings</a>
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="who">
+        <div class="avatar">{{ user.full_name[:1]|upper }}</div>
+        <div>
+          <strong>{{ user.full_name }}</strong>
+          <span class="role-pill {{ user.role }}">{{ user.role }}</span>
+        </div>
+      </div>
+      <div class="foot-actions">
+        <a href="/account" class="mini-link">Account</a>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="mini-link danger" type="submit">Sign out</button>
+        </form>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-btn" id="menuBtn" type="button" aria-label="Toggle navigation">☰</button>
+      <div class="topbar-title">{% block heading %}{% endblock %}</div>
+      <div class="topbar-actions">
+        {% block topbar %}{% endblock %}
+        <a href="/pos" class="btn btn-primary btn-sm">＋ New sale</a>
+      </div>
+    </header>
+
+    <main class="content">
+      {% if msg %}
+      <div class="flash {{ msg_kind }}" data-flash>
+        <span>{{ msg }}</span>
+        <button type="button" class="flash-close" aria-label="Dismiss">×</button>
+      </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

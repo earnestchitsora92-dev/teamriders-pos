@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }}{% endblock %}
+{% block heading %}Product{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ product.name }}</h1>
+    <div class="sub">{{ product.sku }} · {{ product.category }}{% if product.brand %} · {{ product.brand }}{% endif %}
+      {% if not product.is_active %}<span class="badge bad" style="margin-left:6px">archived</span>{% endif %}
+    </div>
+  </div>
+  <div class="row">
+    <a class="btn btn-ghost" href="/products">← Products</a>
+    {% if user.role == 'admin' %}
+    <a class="btn btn-ghost" href="/products/{{ product.id }}/edit">Edit</a>
+    <a class="btn btn-primary" href="/stock/restock?product_id={{ product.id }}">Restock</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi {{ 'tone-bad' if product.stock_qty <= 0 else ('tone-warn' if product.stock_qty <= product.reorder_level else 'tone-ok') }}">
+    <div class="kpi-label">On hand</div>
+    <div class="kpi-value">{{ product.stock_qty }}</div>
+    <div class="kpi-sub">Reorder at {{ product.reorder_level }}</div>
+  </div>
+  <div class="kpi"><div class="kpi-label">Selling price</div><div class="kpi-value">{{ product.price_cents|money }}</div></div>
+  <div class="kpi"><div class="kpi-label">Unit cost (avg)</div><div class="kpi-value">{{ product.cost_cents|money }}</div></div>
+  <div class="kpi tone-brand"><div class="kpi-label">Stock value</div><div class="kpi-value">{{ (product.stock_qty * product.cost_cents)|money }}</div><div class="kpi-sub">Retail {{ (product.stock_qty * product.price_cents)|money }}</div></div>
+</div>
+
+<div class="grid main-side">
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head"><h3>Stock movements</h3><a class="mini-link" href="/stock/movements?q={{ product.sku }}">Full ledger</a></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>When</th><th>Type</th><th class="num">Change</th><th class="num">After</th><th>By</th><th>Reference</th></tr></thead>
+          <tbody>
+          {% for m in movements %}
+            <tr>
+              <td class="muted nowrap">{{ m.created_at|datefmt(true) }}</td>
+              <td><span class="badge {{ 'ok' if m.qty_delta > 0 else 'warn' }}">{{ m.kind }}</span></td>
+              <td class="num {{ 'pos-num' if m.qty_delta > 0 else 'neg-num' }}">{{ '+' if m.qty_delta > 0 else '' }}{{ m.qty_delta }}</td>
+              <td class="num">{{ m.stock_after }}</td>
+              <td>{{ m.user_name or 'system' }}</td>
+              <td class="cell-sub">{{ m.reference or '—' }}{% if m.note %} · {{ m.note }}{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="empty">No movements yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Recent sales of this part</h3></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Receipt</th><th>Date</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Line total</th><th>Status</th></tr></thead>
+          <tbody>
+          {% for s in sales %}
+            <tr>
+              <td><a href="/sales/{{ s.id }}">{{ s.receipt_no }}</a></td>
+              <td class="muted">{{ s.created_at|datefmt(true) }}</td>
+              <td class="num">{{ s.qty }}</td>
+              <td class="num">{{ s.unit_price_cents|money }}</td>
+              <td class="num">{{ s.line_total_cents|money }}</td>
+              <td><span class="badge {{ 'bad' if s.status == 'voided' else 'ok' }}">{{ s.status }}</span></td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="empty">Not sold yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head"><h3>Part details</h3></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>SKU</dt><dd>{{ product.sku }}</dd>
+          <dt>Category</dt><dd>{{ product.category }}</dd>
+          <dt>Brand</dt><dd>{{ product.brand or '—' }}</dd>
+          <dt>Fits</dt><dd>{{ product.compatible or '—' }}</dd>
+          <dt>Margin</dt><dd>{% if product.price_cents %}{{ ((product.price_cents - product.cost_cents) / product.price_cents * 100)|round(1) }}%{% else %}—{% endif %}</dd>
+          <dt>Added</dt><dd>{{ product.created_at|datefmt }}</dd>
+        </dl>
+        {% if product.description %}
+        <hr><p class="hint">{{ product.description }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Waiting customers</h3><span class="badge {{ 'warn' if alerts else '' }}">{{ alerts|length }}</span></div>
+      <div class="card-body tight">
+        <ul class="list-plain">
+          {% for a in alerts %}
+          <li>
+            <div>
+              <div class="cell-title">{{ a.email }}</div>
+              <div class="cell-sub">{{ a.customer_name or 'No name' }}{% if a.phone %} · {{ a.phone }}{% endif %} · {{ a.created_at|datefmt }}</div>
+            </div>
+            <div class="spacer"></div>
+            {% if product.stock_qty > 0 and user.role == 'admin' %}
+            <form method="post" action="/alerts/{{ a.id }}/notify">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <button class="btn btn-sm btn-ghost">Notify</button>
+            </form>
+            {% else %}
+            <span class="badge">waiting</span>
+            {% endif %}
+          </li>
+          {% else %}
+          <li class="muted">No one is waiting for this part.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    {% if user.role == 'admin' %}
+    <div class="card">
+      <div class="card-head"><h3>Admin actions</h3></div>
+      <div class="card-body">
+        <div class="row">
+          <a class="btn btn-ghost btn-sm" href="/stock/adjust?product_id={{ product.id }}">Adjust stock</a>
+          <form method="post" action="/products/{{ product.id }}/toggle" data-confirm="{{ 'Archive this product?' if product.is_active else 'Restore this product?' }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="btn btn-sm {{ 'btn-danger' if product.is_active else 'btn-ghost' }}">{{ 'Archive' if product.is_active else 'Restore' }}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ sale.receipt_no }}{% endblock %}
+{% block heading %}Sale {{ sale.receipt_no }}{% endblock %}
+{% block topbar %}
+<a class="btn btn-ghost btn-sm" href="/sales/{{ sale.id }}/receipt?autoprint=1" target="_blank">Print receipt</a>
+<a class="btn btn-ghost btn-sm" href="/sales/{{ sale.id }}/receipt.pdf?size=thermal" target="_blank">PDF</a>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ sale.receipt_no }}</h1>
+    <div class="sub">{{ sale.created_at|datefmt(true) }} · {{ sale.cashier_name }}
+      <span class="badge {{ 'bad' if sale.status == 'voided' else 'ok' }}" style="margin-left:6px">{{ sale.status }}</span>
+    </div>
+  </div>
+  <div class="row">
+    <a class="btn btn-ghost" href="/sales/{{ sale.id }}/receipt?autoprint=1" target="_blank">Print</a>
+    <a class="btn btn-ghost" href="/sales/{{ sale.id }}/receipt.pdf?size=a4" target="_blank">A4 PDF</a>
+    <a class="btn btn-primary" href="/pos">New sale</a>
+  </div>
+</div>
+
+<div class="grid main-side">
+  <div class="card">
+    <div class="card-head"><h3>Items sold</h3><span class="muted" style="font-size:12px">{{ items|length }} line(s)</span></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Part</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Line total</th></tr></thead>
+        <tbody>
+        {% for it in items %}
+          <tr>
+            <td><div class="cell-title">{{ it.name }}</div><div class="cell-sub">{{ it.sku }}</div></td>
+            <td class="num">{{ it.qty }}</td>
+            <td class="num">{{ it.unit_price_cents|money }}</td>
+            <td class="num"><strong>{{ it.line_total_cents|money }}</strong></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-foot">
+      <div class="stat-list">
+        <div class="stat-row"><span>Subtotal</span><strong>{{ sale.subtotal_cents|money }}</strong></div>
+        {% if sale.discount_cents %}
+        <div class="stat-row"><span>Discount {% if sale.discount_code %}<span class="badge ok">{{ sale.discount_code }}</span>{% endif %}</span><strong class="neg-num">−{{ sale.discount_cents|money }}</strong></div>
+        {% endif %}
+        {% if sale.tax_cents %}
+        <div class="stat-row"><span>{{ settings.tax_label }}</span><strong>{{ sale.tax_cents|money }}</strong></div>
+        {% endif %}
+        <div class="stat-row"><span><strong>Total paid</strong></span><strong style="font-size:16px">{{ sale.total_cents|money }}</strong></div>
+        {% if sale.payment_method == 'cash' %}
+        <div class="stat-row"><span>Tendered</span><strong>{{ sale.tendered_cents|money }}</strong></div>
+        <div class="stat-row"><span>Change</span><strong>{{ sale.change_cents|money }}</strong></div>
+        {% endif %}
+        {% if user.role == 'admin' %}
+        <div class="stat-row"><span>Cost of goods</span><strong>{{ sale.cogs_cents|money }}</strong></div>
+        <div class="stat-row"><span>Profit</span><strong class="pos-num">{{ sale.profit_cents|money }}</strong></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head"><h3>Details</h3></div>
+      <div class="card-body">
+        <dl class="kv">
+          <dt>Payment</dt><dd>{{ sale.payment_method|capitalize }}</dd>
+          <dt>Customer</dt><dd>{{ sale.customer_name or 'Walk-in' }}</dd>
+          <dt>Phone</dt><dd>{{ sale.customer_phone or '—' }}</dd>
+          <dt>Email</dt><dd>{{ sale.customer_email or '—' }}</dd>
+          <dt>Note</dt><dd>{{ sale.note or '—' }}</dd>
+          <dt>Cashier</dt><dd>{{ sale.cashier_name }}</dd>
+        </dl>
+        {% if sale.discount_cents %}
+        <hr>
+        <div class="section-title" style="margin-top:0">Discount record</div>
+        <dl class="kv">
+          <dt>Code</dt><dd>{{ sale.discount_code }}</dd>
+          <dt>Reason</dt><dd>{{ sale.discount_reason or '—' }}</dd>
+          <dt>Approved by</dt><dd>{{ sale.discount_approved_by_name or ('User #' ~ sale.discount_approved_by) }}</dd>
+        </dl>
+        {% endif %}
+        {% if sale.status == 'voided' %}
+        <hr>
+        <div class="badge bad">Voided {{ sale.voided_at|datefmt(true) }}</div>
+        <p class="hint" style="margin-top:8px">{{ sale.void_reason }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if user.role == 'admin' and sale.status == 'completed' %}
+    <div class="card">
+      <div class="card-head"><h3>Void this sale</h3></div>
+      <div class="card-body">
+        <p class="hint" style="margin-bottom:10px">Voiding returns the items to stock and records a refund in the cash ledger. Closed months cannot be voided.</p>
+        <form method="post" action="/sales/{{ sale.id }}/void" data-confirm="Void this sale and return the items to stock?">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="field">
+            <label for="reason">Reason</label>
+            <input id="reason" name="reason" type="text" required placeholder="e.g. Wrong part, customer return">
+          </div>
+          <button class="btn btn-danger btn-block" type="submit">Void sale</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

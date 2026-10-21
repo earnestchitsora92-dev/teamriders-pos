@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Stock{% endblock %}
+{% block heading %}Stock control{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Stock levels</h1>
+    <div class="sub">Live quantities, cost value and reorder alerts.</div>
+  </div>
+  <div class="row">
+    <a class="btn btn-ghost" href="/stock/movements">Stock ledger</a>
+    <a class="btn btn-ghost" href="/stock/adjust">Adjust stock</a>
+    <a class="btn btn-primary" href="/stock/restock">＋ Restock</a>
+  </div>
+</div>
+
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi tone-brand"><div class="kpi-label">Stock value (cost)</div><div class="kpi-value">{{ summary.cost_value_cents|money }}</div><div class="kpi-sub">{{ summary.units|qty }} units</div></div>
+  <div class="kpi tone-ok"><div class="kpi-label">Retail value</div><div class="kpi-value">{{ summary.retail_value_cents|money }}</div><div class="kpi-sub">Potential margin {{ summary.potential_margin_cents|money }}</div></div>
+  <div class="kpi tone-warn"><div class="kpi-label">Low stock</div><div class="kpi-value">{{ summary.low_count }}</div><div class="kpi-sub">At or below reorder level</div></div>
+  <div class="kpi tone-bad"><div class="kpi-label">Out of stock</div><div class="kpi-value">{{ summary.out_count }}</div><div class="kpi-sub">Customers can join the waiting list</div></div>
+</div>
+
+<div class="card">
+  <form class="toolbar" method="get" action="/stock">
+    <div class="field grow"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}" placeholder="Name or SKU"></div>
+    <div class="field">
+      <label for="stock">Filter</label>
+      <select id="stock" name="stock">
+        <option value="">All parts</option>
+        <option value="low" {% if stock_filter == 'low' %}selected{% endif %}>Low stock</option>
+        <option value="out" {% if stock_filter == 'out' %}selected{% endif %}>Out of stock</option>
+      </select>
+    </div>
+    <button class="btn btn-dark" type="submit">Filter</button>
+    <a class="btn btn-ghost" href="/stock">Reset</a>
+    <div class="spacer"></div>
+    <a class="btn btn-ghost" href="/reports/export/stock.csv">Export CSV</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Part</th><th>Category</th><th class="num">On hand</th><th class="num">Reorder</th><th class="num">Unit cost</th><th class="num">Stock value</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for p in products %}
+        <tr class="{% if p.stock_qty <= 0 %}out{% elif p.stock_qty <= p.reorder_level %}low{% endif %}">
+          <td><a class="cell-title" href="/products/{{ p.id }}">{{ p.name }}</a><div class="cell-sub">{{ p.sku }}</div></td>
+          <td>{{ p.category }}</td>
+          <td class="num"><strong>{{ p.stock_qty }}</strong></td>
+          <td class="num">{{ p.reorder_level }}</td>
+          <td class="num">{{ p.cost_cents|money }}</td>
+          <td class="num">{{ (p.stock_qty * p.cost_cents)|money }}</td>
+          <td>
+            {% if p.stock_qty <= 0 %}<span class="badge bad">out of stock</span>
+            {% elif p.stock_qty <= p.reorder_level %}<span class="badge warn">reorder</span>
+            {% else %}<span class="badge ok">OK</span>{% endif %}
+          </td>
+          <td class="right nowrap">
+            <a class="btn btn-sm btn-ghost" href="/stock/restock?product_id={{ p.id }}">Restock</a>
+            <a class="btn btn-sm btn-ghost" href="/stock/adjust?product_id={{ p.id }}">Adjust</a>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="empty">No products match this filter.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Monthly close{% endblock %}
+{% block heading %}Monthly profit close{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Monthly close-off</h1>
+    <div class="sub">Freeze a month's profit, stock value and cash position. Closed months can no longer be voided.</div>
+  </div>
+</div>
+
+{% if preview %}
+<div class="grid cols-4" style="margin-bottom:16px">
+  <div class="kpi tone-brand"><div class="kpi-label">{{ preview.period }} revenue</div><div class="kpi-value">{{ preview.revenue_cents|money }}</div><div class="kpi-sub">{{ preview.sales_count }} sale(s)</div></div>
+  <div class="kpi tone-ok"><div class="kpi-label">Gross profit</div><div class="kpi-value">{{ preview.gross_profit_cents|money }}</div><div class="kpi-sub">{{ preview.margin_percent }}% margin</div></div>
+  <div class="kpi tone-warn"><div class="kpi-label">Expenses</div><div class="kpi-value">{{ preview.expenses_cents|money }}</div><div class="kpi-sub">From the cash ledger</div></div>
+  <div class="kpi tone-brand"><div class="kpi-label">Net profit</div><div class="kpi-value">{{ preview.net_profit_cents|money }}</div><div class="kpi-sub">Gross profit − expenses</div></div>
+</div>
+
+<div class="grid main-side">
+  <div class="card">
+    <div class="card-head"><h3>Preview: {{ preview.period }}</h3>
+      {% if preview.has_activity %}<span class="badge warn">not yet closed</span>{% else %}<span class="badge">no activity</span>{% endif %}
+    </div>
+    <div class="card-body">
+      <div class="grid cols-2">
+        <div class="stat-list">
+          <div class="stat-row"><span>Sales revenue</span><strong>{{ preview.revenue_cents|money }}</strong></div>
+          <div class="stat-row"><span>Discounts given</span><strong class="neg-num">−{{ preview.discounts_cents|money }}</strong></div>
+          <div class="stat-row"><span>Cost of goods sold</span><strong>{{ preview.cogs_cents|money }}</strong></div>
+          <div class="stat-row"><span>Gross profit</span><strong class="pos-num">{{ preview.gross_profit_cents|money }}</strong></div>
+          <div class="stat-row"><span>Operating expenses</span><strong class="neg-num">−{{ preview.expenses_cents|money }}</strong></div>
+          <div class="stat-row"><span><strong>Net profit</strong></span><strong>{{ preview.net_profit_cents|money }}</strong></div>
+        </div>
+        <div class="stat-list">
+          <div class="stat-row"><span>Opening stock value</span><strong>{{ preview.opening_stock_value_cents|money }}</strong></div>
+          <div class="stat-row"><span>Stock purchases</span><strong>{{ preview.purchases_cents|money }}</strong></div>
+          <div class="stat-row"><span>Closing stock value</span><strong>{{ preview.closing_stock_value_cents|money }}</strong></div>
+          <div class="stat-row"><span>Money in</span><strong class="pos-num">{{ preview.cash_in_cents|money }}</strong></div>
+          <div class="stat-row"><span>Money out</span><strong class="neg-num">{{ preview.cash_out_cents|money }}</strong></div>
+          <div class="stat-row"><span>Cash balance</span><strong>{{ preview.cash_balance_cents|money }}</strong></div>
+        </div>
+      </div>
+      {% if preview.voided_count %}
+      <p class="hint" style="margin-top:12px">{{ preview.voided_count }} voided sale(s) worth {{ preview.voided_cents|money }} are excluded from revenue.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Close a month</h3></div>
+    <div class="card-body">
+      <form method="post" action="/closings/close" data-confirm="Close this month? Sales in the month can no longer be voided.">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="field">
+          <label for="period">Month</label>
+          <select id="period" name="period" required>
+            {% for p in options %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="notes">Notes (optional)</label>
+          <textarea id="notes" name="notes" placeholder="Anything the owner should remember about this month"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Close month &amp; lock profit</button>
+      </form>
+      <p class="hint" style="margin-top:12px">Numbers are stored as a permanent snapshot, including top products and cash position.
+        Sales recorded after a month is closed are not added to that snapshot — close at month end for a complete picture.</p>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:16px">
+  <div class="card-head"><h3>Closed months</h3></div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Period</th><th class="num">Revenue</th><th class="num">Gross profit</th><th class="num">Expenses</th><th class="num">Net profit</th><th class="num">Stock value</th><th>Closed by</th><th></th></tr></thead>
+      <tbody>
+      {% for c in closed %}
+        <tr>
+          <td><a class="cell-title" href="/closings/{{ c.id }}">{{ c.period }}</a><div class="cell-sub">{{ c.closed_at|datefmt(true) }}</div></td>
+          <td class="num">{{ c.revenue_cents|money }}</td>
+          <td class="num pos-num">{{ c.gross_profit_cents|money }}</td>
+          <td class="num neg-num">{{ c.expenses_cents|money }}</td>
+          <td class="num"><strong>{{ c.net_profit_cents|money }}</strong></td>
+          <td class="num">{{ c.closing_stock_value_cents|money }}</td>
+          <td>{{ c.closed_by_name }}</td>
+          <td class="right"><a class="btn btn-sm btn-ghost" href="/closings/{{ c.id }}">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="empty"><span class="big">📅</span>No months have been closed yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

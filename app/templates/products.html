@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Products{% endblock %}
+{% block heading %}Product catalogue{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Products</h1>
+    <div class="sub">{{ total }} part(s){% if archived %} · archived{% endif %} · stock value at cost {{ summary.cost_value_cents|money }}</div>
+  </div>
+  <div class="row">
+    {% if user.role == 'admin' %}
+    <a class="btn btn-ghost" href="/products?archived={{ '0' if archived else '1' }}">{{ 'Show active' if archived else 'Show archived' }}</a>
+    <a class="btn btn-primary" href="/products/new">＋ Add product</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <form class="toolbar" method="get" action="/products">
+    <div class="field grow">
+      <label for="q">Search</label>
+      <input id="q" type="search" name="q" value="{{ q }}" placeholder="Name, SKU, bike model">
+    </div>
+    <div class="field">
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        <option value="">All categories</option>
+        {% for c in categories %}<option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="stock">Stock</label>
+      <select id="stock" name="stock">
+        <option value="">Any stock</option>
+        <option value="low" {% if stock_filter == 'low' %}selected{% endif %}>Low stock</option>
+        <option value="out" {% if stock_filter == 'out' %}selected{% endif %}>Out of stock</option>
+      </select>
+    </div>
+    {% if archived %}<input type="hidden" name="archived" value="1">{% endif %}
+    <button class="btn btn-dark" type="submit">Filter</button>
+    <a class="btn btn-ghost" href="/products">Reset</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Part</th><th>Category</th><th class="num">Stock</th><th class="num">Cost</th><th class="num">Price</th>
+          <th class="num">Margin</th><th class="num">Stock value</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for p in products %}
+        <tr class="{% if p.stock_qty <= 0 %}out{% elif p.stock_qty <= p.reorder_level %}low{% endif %}">
+          <td>
+            <a class="cell-title" href="/products/{{ p.id }}">{{ p.name }}</a>
+            <div class="cell-sub">{{ p.sku }}{% if p.brand %} · {{ p.brand }}{% endif %}{% if p.compatible %} · {{ p.compatible }}{% endif %}</div>
+          </td>
+          <td><span class="badge">{{ p.category }}</span></td>
+          <td class="num">
+            {{ p.stock_qty }}
+            {% if p.stock_qty <= 0 %}<div class="cell-sub"><span class="badge bad">out</span></div>
+            {% elif p.stock_qty <= p.reorder_level %}<div class="cell-sub"><span class="badge warn">low</span></div>{% endif %}
+          </td>
+          <td class="num">{{ p.cost_cents|money }}</td>
+          <td class="num">{{ p.price_cents|money }}</td>
+          <td class="num">{% if p.price_cents %}{{ ((p.price_cents - p.cost_cents) / p.price_cents * 100)|round(1) }}%{% else %}—{% endif %}</td>
+          <td class="num">{{ (p.stock_qty * p.cost_cents)|money }}</td>
+          <td class="right nowrap">
+            {% if user.role == 'admin' %}
+            <a class="btn btn-sm btn-ghost" href="/stock/restock?product_id={{ p.id }}">Restock</a>
+            <a class="btn btn-sm btn-ghost" href="/products/{{ p.id }}/edit">Edit</a>
+            {% else %}
+            <a class="btn btn-sm btn-ghost" href="/products/{{ p.id }}">View</a>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="empty"><span class="big">📦</span>No products match this search.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pages > 1 %}
+  <div class="pagination">
+    <span>Page {{ page }} of {{ pages }}</span>
+    {% if page > 1 %}<a href="/products?q={{ q }}&category={{ category }}&stock={{ stock_filter }}&page={{ page - 1 }}{% if archived %}&archived=1{% endif %}">Previous</a>{% endif %}
+    {% if page < pages %}<a href="/products?q={{ q }}&category={{ category }}&stock={{ stock_filter }}&page={{ page + 1 }}{% if archived %}&archived=1{% endif %}">Next</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

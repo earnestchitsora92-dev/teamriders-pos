@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Quotations{% endblock %}
+{% block heading %}Quotations{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Quotations</h1>
+    <div class="sub">Price a job for a rider, print it, then convert it into a sale when they accept.</div>
+  </div>
+  <a class="btn btn-primary" href="/pos?mode=quote">＋ New quotation</a>
+</div>
+
+<div class="card">
+  <form class="toolbar" method="get" action="/quotations">
+    <div class="field">
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        {% for s in ['all', 'draft', 'sent', 'accepted', 'rejected', 'cancelled', 'expired'] %}
+        <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field grow"><label for="q">Search</label><input id="q" type="search" name="q" value="{{ q }}" placeholder="Quote number, customer or email"></div>
+    <button class="btn btn-dark" type="submit">Filter</button>
+    <a class="btn btn-ghost" href="/quotations">Reset</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Quote</th><th>Customer</th><th>Created</th><th>Valid until</th><th class="num">Total</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for q in quotes %}
+        <tr>
+          <td><a class="cell-title" href="/quotations/{{ q.id }}">{{ q.quote_no }}</a><div class="cell-sub">by {{ q.created_by_name }}</div></td>
+          <td>{{ q.customer_name }}{% if q.customer_phone %}<div class="cell-sub">{{ q.customer_phone }}</div>{% endif %}</td>
+          <td class="muted nowrap">{{ q.created_at|datefmt }}</td>
+          <td class="muted nowrap">{{ q.valid_until or '—' }}</td>
+          <td class="num"><strong>{{ q.total_cents|money }}</strong></td>
+          <td><span class="badge {{ 'ok' if q.status == 'accepted' else ('bad' if q.status in ['rejected','cancelled','expired'] else 'info') }}">{{ q.status }}</span></td>
+          <td class="right nowrap">
+            <a class="btn btn-sm btn-ghost" href="/quotations/{{ q.id }}.pdf" target="_blank">PDF</a>
+            {% if q.status not in ['accepted', 'cancelled'] %}
+            <a class="btn btn-sm btn-primary" href="/pos?quote={{ q.id }}">Sell</a>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="empty"><span class="big">📄</span>No quotations yet. <a href="/pos?mode=quote">Create one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
